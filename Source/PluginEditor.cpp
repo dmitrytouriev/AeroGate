@@ -46,6 +46,146 @@ float softWave(float x) noexcept
 {
     return 0.5f + 0.5f * std::sin(x);
 }
+
+static const char* aeroGateDonateQrBase64 = R"QR(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
+RK5CYII=
+)QR";
 }
 
 //==============================================================================
@@ -73,14 +213,34 @@ juce::Point<float> SignalFlowComponent::arcPoint(float radius, float clockDegree
 
 float SignalFlowComponent::thresholdAngle(float db) const noexcept
 {
-    const float norm = juce::jlimit(0.0f, 1.0f, (db + 60.0f) / 60.0f);
-    return 150.0f + norm * (30.0f - 150.0f);
+    const auto bounds = getLocalBounds().toFloat();
+    const float s = juce::jmax(0.6f, bounds.getHeight() / 300.0f);
+    const auto centre = bounds.getCentre();
+    const float radius = juce::jmin(bounds.getHeight() * 0.455f, bounds.getWidth() * 0.145f);
+    const float waveHeight = bounds.getHeight() - 84.0f * s;
+    const float waveMidY = bounds.getY() + 54.0f * s + waveHeight * 0.5f;
+    const float waveHalf = waveHeight * 0.43f;
+
+    const float gain = juce::Decibels::decibelsToGain(db);
+    const float targetY = waveMidY - std::sqrt(juce::jlimit(0.0f, 1.0f, gain)) * waveHalf;
+    const float cosine = juce::jlimit(-1.0f, 1.0f, (centre.y - targetY) / radius);
+    return juce::radiansToDegrees(std::acos(cosine));
 }
 
 float SignalFlowComponent::closeAngle(float db) const noexcept
 {
-    const float norm = juce::jlimit(0.0f, 1.0f, (db + 70.0f) / 70.0f);
-    return 210.0f + norm * (330.0f - 210.0f);
+    const auto bounds = getLocalBounds().toFloat();
+    const float s = juce::jmax(0.6f, bounds.getHeight() / 300.0f);
+    const auto centre = bounds.getCentre();
+    const float radius = juce::jmin(bounds.getHeight() * 0.455f, bounds.getWidth() * 0.145f);
+    const float waveHeight = bounds.getHeight() - 84.0f * s;
+    const float waveMidY = bounds.getY() + 54.0f * s + waveHeight * 0.5f;
+    const float waveHalf = waveHeight * 0.43f;
+
+    const float gain = juce::Decibels::decibelsToGain(db);
+    const float targetY = waveMidY - std::sqrt(juce::jlimit(0.0f, 1.0f, gain)) * waveHalf;
+    const float cosine = juce::jlimit(-1.0f, 1.0f, (centre.y - targetY) / radius);
+    return 360.0f - juce::radiansToDegrees(std::acos(cosine));
 }
 
 void SignalFlowComponent::drawArc(juce::Graphics& g, float radius, float fromDeg, float toDeg,
@@ -190,7 +350,7 @@ void SignalFlowComponent::paint(juce::Graphics& g)
         bounds.getHeight() - 84.0f * s);
 
     drawWaveform(g, leftArea, outputHistory, true);
-    drawWaveform(g, rightArea, inputHistory, false);
+    drawWaveform(g, rightArea, inputHistory, true);
 
     g.setColour(juce::Colour(ink));
     g.setFont(uiFont(19.0f * s, juce::Font::bold));
@@ -520,6 +680,98 @@ void AeroGateAudioProcessorEditor::BypassOverlay::paint(juce::Graphics& g)
 }
 
 //==============================================================================
+AeroGateAudioProcessorEditor::PopupOverlay::PopupOverlay(bool donationPopup)
+    : donation(donationPopup)
+{
+    setInterceptsMouseClicks(true, true);
+    setWantsKeyboardFocus(false);
+}
+
+void AeroGateAudioProcessorEditor::PopupOverlay::setQrImage(juce::Image image)
+{
+    qrImage = std::move(image);
+    repaint();
+}
+
+void AeroGateAudioProcessorEditor::PopupOverlay::paint(juce::Graphics& g)
+{
+    const float s = aerosound::ui::scaleFor(getWidth(), getHeight());
+    g.fillAll(juce::Colours::black.withAlpha(0.13f));
+
+    const float cardW = (donation ? 380.0f : 650.0f) * s;
+    const float cardH = (donation ? 470.0f : 390.0f) * s;
+    const auto card = juce::Rectangle<float>(cardW, cardH)
+                          .withCentre(getLocalBounds().toFloat().getCentre());
+
+    g.setColour(juce::Colours::black.withAlpha(0.10f));
+    g.fillRoundedRectangle(card.translated(2.0f * s, 3.0f * s), 12.0f * s);
+    g.setColour(juce::Colours::white.withAlpha(0.98f));
+    g.fillRoundedRectangle(card, 12.0f * s);
+    g.setColour(juce::Colour(lineBlue).withAlpha(0.90f));
+    g.drawRoundedRectangle(card, 12.0f * s, 1.2f * s);
+
+    auto area = card.reduced(22.0f * s);
+    g.setColour(juce::Colour(ink));
+    g.setFont(uiFont(23.0f * s, juce::Font::bold));
+
+    if (donation)
+    {
+        g.drawText("Support AeroGate", area.removeFromTop(38.0f * s),
+                   juce::Justification::centred);
+        area.removeFromTop(10.0f * s);
+
+        auto qrArea = area.removeFromTop(300.0f * s)
+                           .withSizeKeepingCentre(285.0f * s, 285.0f * s);
+        if (qrImage.isValid())
+        {
+            g.setImageResamplingQuality(juce::Graphics::lowResamplingQuality);
+            g.drawImageWithin(qrImage,
+                              juce::roundToInt(qrArea.getX()),
+                              juce::roundToInt(qrArea.getY()),
+                              juce::roundToInt(qrArea.getWidth()),
+                              juce::roundToInt(qrArea.getHeight()),
+                              juce::RectanglePlacement::centred);
+        }
+
+        area.removeFromTop(8.0f * s);
+        g.setColour(juce::Colour(mutedInk));
+        g.setFont(uiFont(12.5f * s));
+        g.drawText("Scan the QR code to support AeroGate development",
+                   area.toNearestInt(), juce::Justification::centredTop, true);
+    }
+    else
+    {
+        g.drawText("AeroGate Help", area.removeFromTop(42.0f * s),
+                   juce::Justification::centred);
+        area.removeFromTop(8.0f * s);
+
+        g.setColour(juce::Colour(mutedInk));
+        g.setFont(uiFont(14.0f * s));
+        const juce::String text =
+            "THRESHOLD opens the gate. CLOSE is the lower closing threshold and follows Threshold by its stored offset.\n\n"
+            "LOOKAHEAD delays the audio path up to 20 ms so the gate can react before the transient reaches the output.\n\n"
+            "ATTACK, HOLD and RELEASE shape the gate envelope. DEPTH sets attenuation; the −∞ button fully mutes the closed state.\n\n"
+            "HPF and LPF filter only the detector. The headphone button auditions that filtered detector signal.\n\n"
+            "SIDECHAIN selects Internal or External detection. DUCKING inverts the gain action.";
+
+        g.drawFittedText(text, area.toNearestInt(),
+                         juce::Justification::centredLeft, 14, 0.94f);
+
+        g.setColour(juce::Colour(mutedInk).withAlpha(0.72f));
+        g.setFont(uiFont(11.5f * s));
+        g.drawText("Click anywhere or press Esc to close",
+                   card.withTrimmedTop(card.getHeight() - 30.0f * s).toNearestInt(),
+                   juce::Justification::centred);
+    }
+}
+
+void AeroGateAudioProcessorEditor::PopupOverlay::mouseDown(const juce::MouseEvent&)
+{
+    if (onDismiss)
+        onDismiss();
+}
+
+//==============================================================================
 AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcessor& p)
     : AudioProcessorEditor(&p),
       processor(p),
@@ -590,6 +842,31 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
     lpfAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         state, AeroGateAudioProcessor::lpfParamId, lpfSlider);
 
+    const auto forceOneDecimalMs = [](juce::Slider& slider)
+    {
+        slider.setNumDecimalPlacesToDisplay(1);
+        slider.textFromValueFunction = [](double value)
+        {
+            return juce::String(value, 1) + " ms";
+        };
+    };
+
+    forceOneDecimalMs(lookaheadSlider);
+    forceOneDecimalMs(attackSlider);
+    forceOneDecimalMs(holdSlider);
+    forceOneDecimalMs(releaseSlider);
+
+    hpfSlider.setNumDecimalPlacesToDisplay(1);
+    hpfSlider.textFromValueFunction = [](double value)
+    {
+        return value >= 1000.0
+            ? juce::String(value / 1000.0, 1) + " kHz"
+            : juce::String(value, 1) + " Hz";
+    };
+
+    lpfSlider.setNumDecimalPlacesToDisplay(1);
+    lpfSlider.textFromValueFunction = hpfSlider.textFromValueFunction;
+
     for (auto* button : { &gateButton, &duckButton, &internalButton, &externalButton,
                           &depthInfButton, &resetButton, &helpButton, &bypassButton, &donateButton,
                           &presetPrev, &presetNext })
@@ -652,8 +929,12 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
     resetButton.onClick = [this] { resetDefaults(); };
     helpButton.onClick = [this]
     {
-        helpVisible = !helpVisible;
-        repaint();
+        helpVisible = !helpOverlay.isVisible();
+        donateOverlay.setVisible(false);
+        helpOverlay.setBounds(getLocalBounds());
+        helpOverlay.setVisible(helpVisible);
+        if (helpVisible)
+            helpOverlay.toFront(false);
     };
 
     bypassButton.onClick = [this]
@@ -665,6 +946,35 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
     };
 
     donateButton.setTooltip("Support AeroGate development");
+    donateButton.onClick = [this]
+    {
+        helpVisible = false;
+        helpOverlay.setVisible(false);
+        donateOverlay.setBounds(getLocalBounds());
+        donateOverlay.setVisible(true);
+        donateOverlay.toFront(false);
+    };
+
+    helpOverlay.onDismiss = [this]
+    {
+        helpVisible = false;
+        helpOverlay.setVisible(false);
+    };
+    donateOverlay.onDismiss = [this]
+    {
+        donateOverlay.setVisible(false);
+    };
+
+    {
+        juce::MemoryOutputStream qrBytes;
+        if (juce::Base64::convertFromBase64(qrBytes, aeroGateDonateQrBase64))
+            donateOverlay.setQrImage(juce::ImageFileFormat::loadFrom(qrBytes.getData(), qrBytes.getDataSize()));
+    }
+
+    addChildComponent(helpOverlay);
+    addChildComponent(donateOverlay);
+    helpOverlay.setBounds(getLocalBounds());
+    donateOverlay.setBounds(getLocalBounds());
 
     bypassOverlay.setInterceptsMouseClicks(true, true);
     addChildComponent(bypassOverlay);
@@ -833,33 +1143,7 @@ void AeroGateAudioProcessorEditor::paint(juce::Graphics& g)
     g.drawLine(728.0f * sx, 448.0f * sy, 1056.0f * sx, 448.0f * sy, 1.0f * s);
     g.drawLine(536.0f * sx, 600.0f * sy, 684.0f * sx, 600.0f * sy, 1.0f * s);
 
-    if (helpVisible)
-    {
-        g.setColour(juce::Colours::white.withAlpha(0.56f));
-        g.fillAll();
 
-        auto card = rect(250, 190, 600, 330);
-        g.setColour(juce::Colours::white.withAlpha(0.97f));
-        g.fillRoundedRectangle(card, 14.0f * s);
-        g.setColour(juce::Colour(lineBlue));
-        g.drawRoundedRectangle(card, 14.0f * s, 1.2f * s);
-
-        g.setColour(juce::Colour(ink));
-        g.setFont(uiFont(22.0f * s, juce::Font::bold));
-        g.drawText("AeroGate", rect(280, 215, 540, 36), juce::Justification::centred);
-
-        g.setFont(uiFont(14.0f * s));
-        g.setColour(juce::Colour(mutedInk));
-        g.drawFittedText(
-            "Drag the blue side of the centre control for Threshold. Drag the orange side for Close. "
-            "Threshold moves Close with its current offset. Click Depth without dragging to toggle -inf. "
-            "The headphone button auditions the filtered detector signal. "
-            "External Sidechain uses the host sidechain bus. Ducking inverts the gate action.",
-            rect(300, 270, 500, 180).toNearestInt(),
-            juce::Justification::centred, 8);
-        g.drawText("Click the background or press Esc to close",
-                   rect(300, 465, 500, 26), juce::Justification::centred);
-    }
 }
 
 void AeroGateAudioProcessorEditor::resized()
@@ -906,6 +1190,8 @@ void AeroGateAudioProcessorEditor::resized()
     gatePreview.repaint();
     detectorScope.repaint();
 
+    helpOverlay.setBounds(getLocalBounds());
+    donateOverlay.setBounds(getLocalBounds());
     bypassOverlay.setBounds(getLocalBounds());
     if (lastBypass && lastBypassSize != juce::Point<int>(getWidth(), getHeight()))
         refreshBypassSnapshot();
@@ -1100,21 +1386,25 @@ void AeroGateAudioProcessorEditor::timerCallback()
 
 bool AeroGateAudioProcessorEditor::keyPressed(const juce::KeyPress& key)
 {
-    if (helpVisible && key == juce::KeyPress::escapeKey)
+    if (key == juce::KeyPress::escapeKey)
     {
-        helpVisible = false;
-        repaint();
-        return true;
+        if (helpOverlay.isVisible())
+        {
+            helpVisible = false;
+            helpOverlay.setVisible(false);
+            return true;
+        }
+
+        if (donateOverlay.isVisible())
+        {
+            donateOverlay.setVisible(false);
+            return true;
+        }
     }
 
     return false;
 }
 
-void AeroGateAudioProcessorEditor::mouseDown(const juce::MouseEvent& e)
+void AeroGateAudioProcessorEditor::mouseDown(const juce::MouseEvent&)
 {
-    if (helpVisible && e.eventComponent == this)
-    {
-        helpVisible = false;
-        repaint();
-    }
 }
