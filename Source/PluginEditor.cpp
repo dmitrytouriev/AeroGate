@@ -119,28 +119,48 @@ void SignalFlowComponent::drawWaveform(juce::Graphics& g, juce::Rectangle<float>
     auto sampleAt = [&](int i)
     {
         const int index = newestAtRight ? i : (count - 1 - i);
-        return juce::jlimit(-1.0f, 1.0f, history[static_cast<size_t>(index)]);
+        return juce::jlimit(0.0f, 1.0f, history[static_cast<size_t>(index)]);
     };
 
-    g.setColour(juce::Colour(lineBlue).withAlpha(0.30f));
+    g.setColour(juce::Colour(lineBlue).withAlpha(0.28f));
     g.drawHorizontalLine(juce::roundToInt(mid), area.getX(), area.getRight());
 
-    juce::Path waveform;
+    juce::Path top;
+    juce::Path fill;
     for (int i = 0; i < count; ++i)
     {
         const float x = area.getX() + area.getWidth() * static_cast<float>(i)
                                       / static_cast<float>(count - 1);
-        const float y = mid - sampleAt(i) * half;
+        const float amp = std::sqrt(sampleAt(i)) * half;
+        const float y = mid - amp;
+
         if (i == 0)
-            waveform.startNewSubPath(x, y);
+            top.startNewSubPath(x, y);
         else
-            waveform.lineTo(x, y);
+            top.lineTo(x, y);
     }
 
+    fill = top;
+    for (int i = count - 1; i >= 0; --i)
+    {
+        const float x = area.getX() + area.getWidth() * static_cast<float>(i)
+                                      / static_cast<float>(count - 1);
+        const float amp = std::sqrt(sampleAt(i)) * half;
+        fill.lineTo(x, mid + amp);
+    }
+    fill.closeSubPath();
+
+    juce::ColourGradient grad(juce::Colour(0xff38b8ee).withAlpha(0.54f),
+                              area.getX(), mid,
+                              juce::Colour(0xff168dcc).withAlpha(0.20f),
+                              area.getRight(), mid, false);
+    g.setGradientFill(grad);
+    g.fillPath(fill);
+
     g.setColour(juce::Colour(0xff149ee3).withAlpha(0.92f));
-    g.strokePath(waveform, juce::PathStrokeType(1.15f,
-                                                juce::PathStrokeType::curved,
-                                                juce::PathStrokeType::rounded));
+    g.strokePath(top, juce::PathStrokeType(1.0f,
+                                           juce::PathStrokeType::curved,
+                                           juce::PathStrokeType::rounded));
 }
 
 void SignalFlowComponent::paint(juce::Graphics& g)
@@ -307,10 +327,10 @@ void SignalFlowComponent::mouseDoubleClick(const juce::MouseEvent&)
 
 void SignalFlowComponent::pushFrame(const AeroGateAudioProcessor::ScopeFrame& f)
 {
-    constexpr size_t maxHistory = 260;
+    constexpr size_t maxHistory = 400;
 
-    inputHistory.push_back(juce::jlimit(-1.0f, 1.0f, f.input));
-    outputHistory.push_back(juce::jlimit(-1.0f, 1.0f, f.output));
+    inputHistory.push_back(juce::jlimit(0.0f, 1.0f, f.input));
+    outputHistory.push_back(juce::jlimit(0.0f, 1.0f, f.output));
 
     while (inputHistory.size() > maxHistory)
         inputHistory.pop_front();
@@ -418,8 +438,8 @@ void GateEnvelopePreview::paint(juce::Graphics& g)
 //==============================================================================
 void DetectorScope::push(float value)
 {
-    history.push_back(juce::jlimit(-1.0f, 1.0f, value));
-    while (history.size() > 190)
+    history.push_back(juce::jlimit(0.0f, 1.0f, value));
+    while (history.size() > 400)
         history.pop_front();
     repaint();
 }
@@ -449,22 +469,38 @@ void DetectorScope::paint(juce::Graphics& g)
     g.setColour(juce::Colour(lineBlue).withAlpha(0.28f));
     g.drawHorizontalLine(juce::roundToInt(mid), chart.getX(), chart.getRight());
 
-    juce::Path waveform;
+    juce::Path top;
+    juce::Path fill;
+
     for (size_t i = 0; i < history.size(); ++i)
     {
         const float x = chart.getX() + chart.getWidth() * static_cast<float>(i)
                                       / static_cast<float>(history.size() - 1);
-        const float y = mid - history[i] * half;
+        const float amp = std::sqrt(history[i]) * half;
+        const float y = mid - amp;
+
         if (i == 0)
-            waveform.startNewSubPath(x, y);
+            top.startNewSubPath(x, y);
         else
-            waveform.lineTo(x, y);
+            top.lineTo(x, y);
     }
 
+    fill = top;
+    for (int i = static_cast<int>(history.size()) - 1; i >= 0; --i)
+    {
+        const float x = chart.getX() + chart.getWidth() * static_cast<float>(i)
+                                      / static_cast<float>(history.size() - 1);
+        const float amp = std::sqrt(history[static_cast<size_t>(i)]) * half;
+        fill.lineTo(x, mid + amp);
+    }
+    fill.closeSubPath();
+
+    g.setColour(juce::Colour(0xff29aee8).withAlpha(0.35f));
+    g.fillPath(fill);
     g.setColour(juce::Colour(0xff149ee3).withAlpha(0.90f));
-    g.strokePath(waveform, juce::PathStrokeType(1.05f,
-                                                juce::PathStrokeType::curved,
-                                                juce::PathStrokeType::rounded));
+    g.strokePath(top, juce::PathStrokeType(1.0f,
+                                           juce::PathStrokeType::curved,
+                                           juce::PathStrokeType::rounded));
 }
 
 //==============================================================================
@@ -504,17 +540,17 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
     addAndMakeVisible(detectorScope);
 
     setupRotary(lookaheadSlider, " ms", 1);
-    setupRotary(attackSlider, " ms", 2);
-    setupRotary(holdSlider, " ms", 0);
-    setupRotary(releaseSlider, " ms", 0);
-    setupRotary(hpfSlider, " Hz", 0);
-    setupRotary(lpfSlider, " Hz", 0);
+    setupRotary(attackSlider, " ms", 1);
+    setupRotary(holdSlider, " ms", 1);
+    setupRotary(releaseSlider, " ms", 1);
+    setupRotary(hpfSlider, " Hz", 1);
+    setupRotary(lpfSlider, " Hz", 1);
 
     hpfSlider.textFromValueFunction = [](double v)
     {
         if (v >= 1000.0)
-            return juce::String(v / 1000.0, 2) + " kHz";
-        return juce::String(v, 0) + " Hz";
+            return juce::String(v / 1000.0, 1) + " kHz";
+        return juce::String(v, 1) + " Hz";
     };
 
     lpfSlider.textFromValueFunction = hpfSlider.textFromValueFunction;
@@ -555,7 +591,7 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
         state, AeroGateAudioProcessor::lpfParamId, lpfSlider);
 
     for (auto* button : { &gateButton, &duckButton, &internalButton, &externalButton,
-                          &resetButton, &helpButton, &bypassButton, &donateButton,
+                          &depthInfButton, &resetButton, &helpButton, &bypassButton, &donateButton,
                           &presetPrev, &presetNext })
     {
         setupSmallButton(*button);
@@ -566,6 +602,15 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
     duckButton.onClick = [this] { setParameterValue(AeroGateAudioProcessor::modeParamId, 1.0f); };
     internalButton.onClick = [this] { setParameterValue(AeroGateAudioProcessor::externalSidechainParamId, 0.0f); };
     externalButton.onClick = [this] { setParameterValue(AeroGateAudioProcessor::externalSidechainParamId, 1.0f); };
+
+    depthInfButton.setButtonText(juce::String::fromUTF8("−∞"));
+    depthInfButton.onClick = [this]
+    {
+        const bool inf = processor.getValueTreeState().getRawParameterValue(
+            AeroGateAudioProcessor::depthInfParamId)->load() >= 0.5f;
+        setParameterValue(AeroGateAudioProcessor::depthInfParamId, inf ? 0.0f : 1.0f);
+        updateDepthState();
+    };
 
     addAndMakeVisible(audibleButton);
 
@@ -644,7 +689,12 @@ void AeroGateAudioProcessorEditor::setupRotary(juce::Slider& slider,
     slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 76, 22);
     slider.setTextValueSuffix(suffix);
-    slider.setNumDecimalPlacesToDisplay(decimals);
+    slider.setNumDecimalPlacesToDisplay(1);
+    slider.textFromValueFunction = [suffix](double value)
+    {
+        return juce::String(value, 1) + suffix;
+    };
+    juce::ignoreUnused(decimals);
     slider.setColour(juce::Slider::textBoxTextColourId, juce::Colour(ink));
     slider.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::white.withAlpha(0.34f));
     slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(lineBlue).withAlpha(0.42f));
@@ -768,8 +818,8 @@ void AeroGateAudioProcessorEditor::paint(juce::Graphics& g)
 
     g.setFont(uiFont(14.0f * s, juce::Font::bold));
     g.setColour(juce::Colour(ink));
-    g.drawText(depthInf ? juce::String("-inf") : juce::String(depth, 1) + " dB",
-               rect(435, 555, 65, 24), juce::Justification::centred);
+    g.drawText(depthInf ? juce::String::fromUTF8("−∞") : juce::String(depth, 1) + " dB",
+               rect(435, 550, 65, 22), juce::Justification::centred);
 
     g.setFont(uiFont(15.0f * s, juce::Font::bold));
     g.drawText("SIDECHAIN", rect(536, 572, 130, 24), juce::Justification::centredLeft);
@@ -830,7 +880,8 @@ void AeroGateAudioProcessorEditor::resized()
     set(attackSlider, 143, 475, 92, 82);
     set(holdSlider, 241, 475, 92, 82);
     set(releaseSlider, 339, 475, 92, 82);
-    set(depthSlider, 445, 478, 50, 78);
+    set(depthSlider, 445, 478, 50, 72);
+    set(depthInfButton, 438, 576, 60, 28);
     set(gatePreview, 44, 575, 390, 100);
 
     set(gateButton, 536, 465, 72, 38);
@@ -958,6 +1009,12 @@ void AeroGateAudioProcessorEditor::updateDepthState()
     const bool inf = processor.getValueTreeState().getRawParameterValue(
         AeroGateAudioProcessor::depthInfParamId)->load() >= 0.5f;
     depthSlider.setAlpha(inf ? 0.42f : 1.0f);
+    depthInfButton.setToggleState(inf, juce::dontSendNotification);
+    depthInfButton.setColour(juce::TextButton::buttonColourId,
+                             inf ? juce::Colour(accentStrong)
+                                 : juce::Colours::white.withAlpha(0.50f));
+    depthInfButton.setColour(juce::TextButton::textColourOffId,
+                             inf ? juce::Colours::white : juce::Colour(ink));
     repaint();
 }
 
