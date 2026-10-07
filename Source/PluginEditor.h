@@ -121,8 +121,6 @@ private:
     juce::TextButton externalButton { "External" };
 
     aerosound::ui::HeadphoneButton audibleButton { "Audible" };
-    aerosound::ui::HeadphoneButton listenHpfButton { "Listen HPF" };
-    aerosound::ui::HeadphoneButton listenLpfButton { "Listen LPF" };
 
     juce::ComboBox presetBox;
     juce::TextButton presetPrev { "<" };
