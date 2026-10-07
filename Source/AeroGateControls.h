@@ -68,13 +68,13 @@ public:
 
     void drawLinearSlider(juce::Graphics& g, int x, int y, int width, int height,
                           float sliderPos, float minSliderPos, float maxSliderPos,
-                          const juce::Slider::SliderStyle style, juce::Slider&) override
+                          const juce::Slider::SliderStyle style, juce::Slider& slider) override
     {
         if (style != juce::Slider::LinearVertical)
         {
             juce::LookAndFeel_V4::drawLinearSlider(g, x, y, width, height,
                                                    sliderPos, minSliderPos, maxSliderPos,
-                                                   style, *static_cast<juce::Slider*>(nullptr));
+                                                   style, slider);
             return;
         }
 
