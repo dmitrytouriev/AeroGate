@@ -50,6 +50,7 @@ public:
 
     static constexpr const char* thresholdParamId = "threshold";
     static constexpr const char* closeParamId = "close";
+    static constexpr const char* closeEnabledParamId = "closeEnabled";
     static constexpr const char* lookaheadParamId = "lookahead";
     static constexpr const char* attackParamId = "attack";
     static constexpr const char* holdParamId = "hold";
