@@ -112,53 +112,35 @@ void SignalFlowComponent::drawWaveform(juce::Graphics& g, juce::Rectangle<float>
     if (history.size() < 2 || area.isEmpty())
         return;
 
-    juce::Path top;
-    juce::Path bottom;
     const float mid = area.getCentreY();
-    const float half = area.getHeight() * 0.40f;
+    const float half = area.getHeight() * 0.43f;
     const int count = static_cast<int>(history.size());
 
     auto sampleAt = [&](int i)
     {
         const int index = newestAtRight ? i : (count - 1 - i);
-        return juce::jlimit(0.0f, 1.0f, history[static_cast<size_t>(index)]);
+        return juce::jlimit(-1.0f, 1.0f, history[static_cast<size_t>(index)]);
     };
 
+    g.setColour(juce::Colour(lineBlue).withAlpha(0.30f));
+    g.drawHorizontalLine(juce::roundToInt(mid), area.getX(), area.getRight());
+
+    juce::Path waveform;
     for (int i = 0; i < count; ++i)
     {
-        const float x = area.getX() + area.getWidth() * static_cast<float>(i) / static_cast<float>(count - 1);
-        const float amp = std::sqrt(sampleAt(i)) * half;
+        const float x = area.getX() + area.getWidth() * static_cast<float>(i)
+                                      / static_cast<float>(count - 1);
+        const float y = mid - sampleAt(i) * half;
         if (i == 0)
-        {
-            top.startNewSubPath(x, mid - amp);
-            bottom.startNewSubPath(x, mid + amp);
-        }
+            waveform.startNewSubPath(x, y);
         else
-        {
-            top.lineTo(x, mid - amp);
-            bottom.lineTo(x, mid + amp);
-        }
+            waveform.lineTo(x, y);
     }
 
-    juce::Path fill = top;
-    for (int i = count - 1; i >= 0; --i)
-    {
-        const float x = area.getX() + area.getWidth() * static_cast<float>(i) / static_cast<float>(count - 1);
-        const float amp = std::sqrt(sampleAt(i)) * half;
-        fill.lineTo(x, mid + amp);
-    }
-    fill.closeSubPath();
-
-    juce::ColourGradient grad(juce::Colour(0xff5bc5f3).withAlpha(0.72f),
-                              area.getX(), mid,
-                              juce::Colour(0xff168dcc).withAlpha(0.28f),
-                              area.getRight(), mid, false);
-    g.setGradientFill(grad);
-    g.fillPath(fill);
-
-    g.setColour(juce::Colour(accentStrong).withAlpha(0.76f));
-    g.strokePath(top, juce::PathStrokeType(0.9f));
-    g.strokePath(bottom, juce::PathStrokeType(0.9f));
+    g.setColour(juce::Colour(0xff149ee3).withAlpha(0.92f));
+    g.strokePath(waveform, juce::PathStrokeType(1.15f,
+                                                juce::PathStrokeType::curved,
+                                                juce::PathStrokeType::rounded));
 }
 
 void SignalFlowComponent::paint(juce::Graphics& g)
@@ -327,8 +309,8 @@ void SignalFlowComponent::pushFrame(const AeroGateAudioProcessor::ScopeFrame& f)
 {
     constexpr size_t maxHistory = 260;
 
-    inputHistory.push_back(juce::jlimit(0.0f, 1.0f, f.input));
-    outputHistory.push_back(juce::jlimit(0.0f, 1.0f, f.output));
+    inputHistory.push_back(juce::jlimit(-1.0f, 1.0f, f.input));
+    outputHistory.push_back(juce::jlimit(-1.0f, 1.0f, f.output));
 
     while (inputHistory.size() > maxHistory)
         inputHistory.pop_front();
@@ -436,7 +418,7 @@ void GateEnvelopePreview::paint(juce::Graphics& g)
 //==============================================================================
 void DetectorScope::push(float value)
 {
-    history.push_back(juce::jlimit(0.0f, 1.0f, value));
+    history.push_back(juce::jlimit(-1.0f, 1.0f, value));
     while (history.size() > 190)
         history.pop_front();
     repaint();
@@ -461,33 +443,28 @@ void DetectorScope::paint(juce::Graphics& g)
     if (history.size() < 2)
         return;
 
-    juce::Path top;
     const float mid = chart.getCentreY();
     const float half = chart.getHeight() * 0.42f;
 
+    g.setColour(juce::Colour(lineBlue).withAlpha(0.28f));
+    g.drawHorizontalLine(juce::roundToInt(mid), chart.getX(), chart.getRight());
+
+    juce::Path waveform;
     for (size_t i = 0; i < history.size(); ++i)
     {
         const float x = chart.getX() + chart.getWidth() * static_cast<float>(i)
                                       / static_cast<float>(history.size() - 1);
-        const float amp = std::sqrt(history[i]) * half;
+        const float y = mid - history[i] * half;
         if (i == 0)
-            top.startNewSubPath(x, mid - amp);
+            waveform.startNewSubPath(x, y);
         else
-            top.lineTo(x, mid - amp);
+            waveform.lineTo(x, y);
     }
 
-    juce::Path fill = top;
-    for (int i = static_cast<int>(history.size()) - 1; i >= 0; --i)
-    {
-        const float x = chart.getX() + chart.getWidth() * static_cast<float>(i)
-                                      / static_cast<float>(history.size() - 1);
-        const float amp = std::sqrt(history[static_cast<size_t>(i)]) * half;
-        fill.lineTo(x, mid + amp);
-    }
-    fill.closeSubPath();
-
-    g.setColour(juce::Colour(0xff29aee8).withAlpha(0.56f));
-    g.fillPath(fill);
+    g.setColour(juce::Colour(0xff149ee3).withAlpha(0.90f));
+    g.strokePath(waveform, juce::PathStrokeType(1.05f,
+                                                juce::PathStrokeType::curved,
+                                                juce::PathStrokeType::rounded));
 }
 
 //==============================================================================
@@ -591,8 +568,6 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
     externalButton.onClick = [this] { setParameterValue(AeroGateAudioProcessor::externalSidechainParamId, 1.0f); };
 
     addAndMakeVisible(audibleButton);
-    addAndMakeVisible(listenHpfButton);
-    addAndMakeVisible(listenLpfButton);
 
     audibleButton.onClick = [this]
     {
@@ -601,23 +576,6 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
         updateAuditionState();
     };
 
-    listenHpfButton.onClick = [this]
-    {
-        const bool on = listenHpfButton.getToggleState();
-        setParameterValue(AeroGateAudioProcessor::listenHpfParamId, on ? 1.0f : 0.0f);
-        if (on)
-            setParameterValue(AeroGateAudioProcessor::listenLpfParamId, 0.0f);
-        updateAuditionState();
-    };
-
-    listenLpfButton.onClick = [this]
-    {
-        const bool on = listenLpfButton.getToggleState();
-        setParameterValue(AeroGateAudioProcessor::listenLpfParamId, on ? 1.0f : 0.0f);
-        if (on)
-            setParameterValue(AeroGateAudioProcessor::listenHpfParamId, 0.0f);
-        updateAuditionState();
-    };
 
     presetBox.addItem("Default", 1);
     presetBox.addItem("Kick Tight", 2);
@@ -687,6 +645,10 @@ void AeroGateAudioProcessorEditor::setupRotary(juce::Slider& slider,
     slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 76, 22);
     slider.setTextValueSuffix(suffix);
     slider.setNumDecimalPlacesToDisplay(decimals);
+    slider.setColour(juce::Slider::textBoxTextColourId, juce::Colour(ink));
+    slider.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::white.withAlpha(0.34f));
+    slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(lineBlue).withAlpha(0.42f));
+    slider.setColour(juce::Slider::textBoxHighlightColourId, juce::Colour(accentStrong).withAlpha(0.25f));
     slider.setDoubleClickReturnValue(true, slider.getValue());
     slider.setMouseCursor(juce::MouseCursor::PointingHandCursor);
 }
@@ -876,10 +838,8 @@ void AeroGateAudioProcessorEditor::resized()
     set(internalButton, 536, 615, 74, 38);
     set(externalButton, 612, 615, 72, 38);
 
-    set(hpfSlider, 728, 475, 92, 82);
-    set(listenHpfButton, 812, 492, 34, 34);
-    set(lpfSlider, 846, 475, 92, 82);
-    set(listenLpfButton, 930, 492, 34, 34);
+    set(hpfSlider, 742, 475, 104, 82);
+    set(lpfSlider, 862, 475, 104, 82);
     set(audibleButton, 986, 482, 58, 58);
     set(detectorScope, 728, 575, 328, 100);
 
@@ -925,8 +885,6 @@ void AeroGateAudioProcessorEditor::resetDefaults()
     setParameterValue(AeroGateAudioProcessor::modeParamId, 0.0f);
     setParameterValue(AeroGateAudioProcessor::externalSidechainParamId, 0.0f);
     setParameterValue(AeroGateAudioProcessor::audibleParamId, 0.0f);
-    setParameterValue(AeroGateAudioProcessor::listenHpfParamId, 0.0f);
-    setParameterValue(AeroGateAudioProcessor::listenLpfParamId, 0.0f);
     updateButtonStates();
     updateDepthState();
     updateAuditionState();
@@ -1007,22 +965,8 @@ void AeroGateAudioProcessorEditor::updateAuditionState()
 {
     const bool audible = processor.getValueTreeState().getRawParameterValue(
         AeroGateAudioProcessor::audibleParamId)->load() >= 0.5f;
-    const bool hpf = processor.getValueTreeState().getRawParameterValue(
-        AeroGateAudioProcessor::listenHpfParamId)->load() >= 0.5f;
-    const bool lpf = processor.getValueTreeState().getRawParameterValue(
-        AeroGateAudioProcessor::listenLpfParamId)->load() >= 0.5f;
 
     audibleButton.setToggleState(audible, juce::dontSendNotification);
-    listenHpfButton.setEnabled(audible);
-    listenLpfButton.setEnabled(audible);
-    listenHpfButton.setToggleState(audible && hpf, juce::dontSendNotification);
-    listenLpfButton.setToggleState(audible && lpf, juce::dontSendNotification);
-
-    if (!audible && (hpf || lpf))
-    {
-        setParameterValue(AeroGateAudioProcessor::listenHpfParamId, 0.0f);
-        setParameterValue(AeroGateAudioProcessor::listenLpfParamId, 0.0f);
-    }
 }
 
 void AeroGateAudioProcessorEditor::refreshBypassSnapshot()
