@@ -16,6 +16,35 @@ float dbFromLinear(float value) noexcept
 {
     return juce::Decibels::gainToDecibels(juce::jmax(value, 1.0e-7f), -100.0f);
 }
+
+juce::AudioParameterFloatAttributes makeDbAttributes()
+{
+    return juce::AudioParameterFloatAttributes()
+        .withStringFromValueFunction([](float v, int)
+        {
+            return juce::String(v, 1) + " dB";
+        });
+}
+
+juce::AudioParameterFloatAttributes makeMsAttributes()
+{
+    return juce::AudioParameterFloatAttributes()
+        .withStringFromValueFunction([](float v, int)
+        {
+            return juce::String(v, 1) + " ms";
+        });
+}
+
+juce::AudioParameterFloatAttributes makeHzAttributes()
+{
+    return juce::AudioParameterFloatAttributes()
+        .withStringFromValueFunction([](float v, int)
+        {
+            return v >= 1000.0f
+                ? juce::String(v / 1000.0f, 1) + " kHz"
+                : juce::String(v, 1) + " Hz";
+        });
+}
 }
 
 AeroGateAudioProcessor::AeroGateAudioProcessor()
@@ -34,42 +63,45 @@ juce::AudioProcessorValueTreeState::ParameterLayout AeroGateAudioProcessor::crea
 
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         PID { thresholdParamId, 1 }, "Threshold",
-        juce::NormalisableRange<float>(-60.0f, 0.0f, 0.1f), -24.0f));
+        juce::NormalisableRange<float>(-60.0f, 0.0f, 0.1f), -24.0f, makeDbAttributes()));
 
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         PID { closeParamId, 1 }, "Close",
-        juce::NormalisableRange<float>(-70.0f, 0.0f, 0.1f), -30.0f));
+        juce::NormalisableRange<float>(-70.0f, 0.0f, 0.1f), -30.0f, makeDbAttributes()));
+
+    layout.add(std::make_unique<juce::AudioParameterBool>(
+        PID { closeEnabledParamId, 1 }, "Close Enabled", true));
 
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         PID { lookaheadParamId, 1 }, "Lookahead",
-        juce::NormalisableRange<float>(0.0f, 20.0f, 0.1f), 5.0f));
+        juce::NormalisableRange<float>(0.0f, 20.0f, 0.1f), 5.0f, makeMsAttributes()));
 
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         PID { attackParamId, 1 }, "Attack",
-        makeSkewedRange(0.05f, 100.0f, 5.0f), 2.0f));
+        makeSkewedRange(0.05f, 100.0f, 5.0f), 2.0f, makeMsAttributes()));
 
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         PID { holdParamId, 1 }, "Hold",
-        makeSkewedRange(0.0f, 1000.0f, 100.0f), 50.0f));
+        makeSkewedRange(0.0f, 1000.0f, 100.0f), 50.0f, makeMsAttributes()));
 
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         PID { releaseParamId, 1 }, "Release",
-        makeSkewedRange(5.0f, 2000.0f, 180.0f), 120.0f));
+        makeSkewedRange(5.0f, 2000.0f, 180.0f), 120.0f, makeMsAttributes()));
 
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         PID { depthParamId, 1 }, "Depth",
-        juce::NormalisableRange<float>(-50.0f, 0.0f, 0.1f), -40.0f));
+        juce::NormalisableRange<float>(-50.0f, 0.0f, 0.1f), -40.0f, makeDbAttributes()));
 
     layout.add(std::make_unique<juce::AudioParameterBool>(
         PID { depthInfParamId, 1 }, "Depth Infinity", false));
 
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         PID { hpfParamId, 1 }, "Detector HPF",
-        makeSkewedRange(20.0f, 2000.0f, 160.0f), 20.0f));
+        makeSkewedRange(20.0f, 2000.0f, 160.0f), 20.0f, makeHzAttributes()));
 
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         PID { lpfParamId, 1 }, "Detector LPF",
-        makeSkewedRange(200.0f, 20000.0f, 2000.0f), 1000.0f));
+        makeSkewedRange(200.0f, 20000.0f, 2000.0f), 1000.0f, makeHzAttributes()));
 
     layout.add(std::make_unique<juce::AudioParameterChoice>(
         PID { modeParamId, 1 }, "Mode",
@@ -275,7 +307,9 @@ void AeroGateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
         : mainInput;
 
     const float thresholdDb = parameters.getRawParameterValue(thresholdParamId)->load();
-    const float closeDb = juce::jmin(parameters.getRawParameterValue(closeParamId)->load(), thresholdDb);
+    const bool closeEnabled = parameters.getRawParameterValue(closeEnabledParamId)->load() >= 0.5f;
+    const float storedCloseDb = parameters.getRawParameterValue(closeParamId)->load();
+    const float closeDb = closeEnabled ? juce::jmin(storedCloseDb, thresholdDb) : thresholdDb;
     const float lookaheadMs = parameters.getRawParameterValue(lookaheadParamId)->load();
     const float attackMs = parameters.getRawParameterValue(attackParamId)->load();
     const float holdMs = parameters.getRawParameterValue(holdParamId)->load();
