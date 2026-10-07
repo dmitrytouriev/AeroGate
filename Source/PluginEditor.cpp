@@ -360,7 +360,10 @@ void SignalFlowComponent::paint(juce::Graphics& g)
                juce::Justification::centred);
 
     const float threshold = static_cast<float>(thresholdValue.getValue());
-    const float close = juce::jmin(static_cast<float>(closeValue.getValue()), threshold);
+    const bool closeEnabled = processor.getValueTreeState().getRawParameterValue(
+        AeroGateAudioProcessor::closeEnabledParamId)->load() >= 0.5f;
+    const float storedClose = juce::jmin(static_cast<float>(closeValue.getValue()), threshold);
+    const float close = closeEnabled ? storedClose : threshold;
     const auto thresholdHandle = arcPoint(radius, thresholdAngle(threshold));
     const auto closeHandle = arcPoint(radius, closeAngle(close));
 
@@ -426,14 +429,17 @@ void SignalFlowComponent::paint(juce::Graphics& g)
                juce::Justification::centred);
 
     g.setFont(uiFont(13.0f * s, juce::Font::bold));
-    g.setColour(juce::Colour(aerosound::ui::meterOrange));
+    g.setColour(closeEnabled
+                    ? juce::Colour(aerosound::ui::meterOrange)
+                    : juce::Colour(mutedInk).withAlpha(0.52f));
     g.drawText("CLOSE",
                juce::Rectangle<float>(centre.x - innerRadius, centre.y + 73.0f * s,
                                       innerRadius * 2.0f, 20.0f * s),
                juce::Justification::centred);
 
     g.setFont(uiFont(18.0f * s, juce::Font::bold));
-    g.setColour(juce::Colour(0xff27366d));
+    g.setColour(closeEnabled ? juce::Colour(0xff27366d)
+                             : juce::Colour(mutedInk).withAlpha(0.60f));
     g.drawText(juce::String(close, 1) + " dB",
                juce::Rectangle<float>(centre.x - innerRadius, centre.y + 92.0f * s,
                                       innerRadius * 2.0f, 26.0f * s),
@@ -442,7 +448,35 @@ void SignalFlowComponent::paint(juce::Graphics& g)
 
 void SignalFlowComponent::mouseDown(const juce::MouseEvent& e)
 {
-    const auto centre = getLocalBounds().toFloat().getCentre();
+    const auto bounds = getLocalBounds().toFloat();
+    const float s = juce::jmax(0.6f, bounds.getHeight() / 300.0f);
+    const auto centre = bounds.getCentre();
+    const float radius = juce::jmin(bounds.getHeight() * 0.455f, bounds.getWidth() * 0.145f);
+    const float innerRadius = radius * 0.73f;
+
+    const auto closeLabelBounds = juce::Rectangle<float>(
+        centre.x - innerRadius,
+        centre.y + 70.0f * s,
+        innerRadius * 2.0f,
+        27.0f * s);
+
+    if (closeLabelBounds.contains(e.position))
+    {
+        if (auto* parameter = processor.getValueTreeState().getParameter(
+                AeroGateAudioProcessor::closeEnabledParamId))
+        {
+            const bool enabled = processor.getValueTreeState().getRawParameterValue(
+                AeroGateAudioProcessor::closeEnabledParamId)->load() >= 0.5f;
+            parameter->beginChangeGesture();
+            parameter->setValueNotifyingHost(enabled ? 0.0f : 1.0f);
+            parameter->endChangeGesture();
+        }
+
+        dragTarget = DragTarget::none;
+        repaint();
+        return;
+    }
+
     dragTarget = e.position.x >= centre.x ? DragTarget::threshold : DragTarget::close;
     dragStartY = e.position.y;
 
@@ -453,6 +487,20 @@ void SignalFlowComponent::mouseDown(const juce::MouseEvent& e)
     }
     else
     {
+        const bool enabled = processor.getValueTreeState().getRawParameterValue(
+            AeroGateAudioProcessor::closeEnabledParamId)->load() >= 0.5f;
+
+        if (!enabled)
+        {
+            if (auto* parameter = processor.getValueTreeState().getParameter(
+                    AeroGateAudioProcessor::closeEnabledParamId))
+            {
+                parameter->beginChangeGesture();
+                parameter->setValueNotifyingHost(1.0f);
+                parameter->endChangeGesture();
+            }
+        }
+
         dragStartValue = closeValue.getValue();
     }
 }
@@ -998,7 +1046,7 @@ void AeroGateAudioProcessorEditor::setupRotary(juce::Slider& slider,
 {
     slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
     slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 76, 22);
-    slider.setTextValueSuffix(suffix);
+    slider.setTextValueSuffix({});
     slider.setNumDecimalPlacesToDisplay(1);
     slider.textFromValueFunction = [suffix](double value)
     {
@@ -1211,6 +1259,7 @@ void AeroGateAudioProcessorEditor::resetDefaults()
 {
     setParameterValue(AeroGateAudioProcessor::thresholdParamId, -24.0f);
     setParameterValue(AeroGateAudioProcessor::closeParamId, -30.0f);
+    setParameterValue(AeroGateAudioProcessor::closeEnabledParamId, 1.0f);
     setParameterValue(AeroGateAudioProcessor::lookaheadParamId, 5.0f);
     setParameterValue(AeroGateAudioProcessor::attackParamId, 2.0f);
     setParameterValue(AeroGateAudioProcessor::holdParamId, 50.0f);
