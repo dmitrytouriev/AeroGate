@@ -108,7 +108,7 @@ void AeroGateAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBloc
     delayBuffer.setSize(juce::jmax(2, getTotalNumOutputChannels()), maxDelaySamples, false, true, true);
     delayBuffer.clear();
 
-    scopeDecimation = juce::jmax(1, juce::roundToInt(sampleRate / 3000.0));
+    scopeDecimation = juce::jmax(1, juce::roundToInt(sampleRate / 100.0));
     resetDsp();
     updateFilterCutoffs();
     updateLatency(parameters.getRawParameterValue(lookaheadParamId)->load());
@@ -130,6 +130,9 @@ void AeroGateAudioProcessor::resetDsp()
     gateLatched = false;
     holdRemainingSamples = 0;
     scopeCounter = 0;
+    scopeInputPeak = 0.0f;
+    scopeOutputPeak = 0.0f;
+    scopeDetectorPeak = 0.0f;
 }
 
 bool AeroGateAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) const
@@ -357,12 +360,19 @@ void AeroGateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
 
         outputScope /= static_cast<float>(juce::jmax(1, numOutChannels));
 
+        scopeInputPeak = juce::jmax(scopeInputPeak, std::abs(inputScope));
+        scopeOutputPeak = juce::jmax(scopeOutputPeak, std::abs(outputScope));
+        scopeDetectorPeak = juce::jmax(scopeDetectorPeak, std::abs(detectorScope));
+
         if (++scopeCounter >= scopeDecimation)
         {
             scopeCounter = 0;
-            pushScopeFrame(juce::jlimit(-1.0f, 1.0f, inputScope),
-                           juce::jlimit(-1.0f, 1.0f, outputScope),
-                           juce::jlimit(-1.0f, 1.0f, detectorScope));
+            pushScopeFrame(juce::jlimit(0.0f, 1.0f, scopeInputPeak),
+                           juce::jlimit(0.0f, 1.0f, scopeOutputPeak),
+                           juce::jlimit(0.0f, 1.0f, scopeDetectorPeak));
+            scopeInputPeak = 0.0f;
+            scopeOutputPeak = 0.0f;
+            scopeDetectorPeak = 0.0f;
         }
 
         if (++delayWriteIndex >= maxDelaySamples)
@@ -405,12 +415,19 @@ void AeroGateAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buff
         inputScope /= denom;
         outputScope /= denom;
 
+        scopeInputPeak = juce::jmax(scopeInputPeak, std::abs(inputScope));
+        scopeOutputPeak = juce::jmax(scopeOutputPeak, std::abs(outputScope));
+        scopeDetectorPeak = juce::jmax(scopeDetectorPeak, std::abs(inputScope));
+
         if (++scopeCounter >= scopeDecimation)
         {
             scopeCounter = 0;
-            pushScopeFrame(juce::jlimit(-1.0f, 1.0f, inputScope),
-                           juce::jlimit(-1.0f, 1.0f, outputScope),
-                           juce::jlimit(-1.0f, 1.0f, inputScope));
+            pushScopeFrame(juce::jlimit(0.0f, 1.0f, scopeInputPeak),
+                           juce::jlimit(0.0f, 1.0f, scopeOutputPeak),
+                           juce::jlimit(0.0f, 1.0f, scopeDetectorPeak));
+            scopeInputPeak = 0.0f;
+            scopeOutputPeak = 0.0f;
+            scopeDetectorPeak = 0.0f;
         }
 
         if (++delayWriteIndex >= maxDelaySamples)
