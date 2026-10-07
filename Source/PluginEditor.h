@@ -86,6 +86,20 @@ private:
         juce::Image snapshot;
     };
 
+    class PopupOverlay final : public juce::Component
+    {
+    public:
+        explicit PopupOverlay(bool donationPopup);
+        void setQrImage(juce::Image);
+        void paint(juce::Graphics&) override;
+        void mouseDown(const juce::MouseEvent&) override;
+        std::function<void()> onDismiss;
+
+    private:
+        bool donation = false;
+        juce::Image qrImage;
+    };
+
     void timerCallback() override;
     void setupRotary(juce::Slider&, const juce::String& suffix, int decimals);
     void setupSmallButton(juce::TextButton&);
@@ -140,6 +154,8 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lpfAttachment;
 
     BypassOverlay bypassOverlay;
+    PopupOverlay helpOverlay { false };
+    PopupOverlay donateOverlay { true };
     bool lastBypass = false;
     juce::Point<int> lastBypassSize;
     bool helpVisible = false;
