@@ -554,8 +554,11 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
         updateDepthState();
     };
 
-    for (auto* slider : { &lookaheadSlider, &attackSlider, &holdSlider,
-                          &releaseSlider, &depthSlider, &hpfSlider, &lpfSlider })
+    std::array<juce::Slider*, 7> sliders {
+        &lookaheadSlider, &attackSlider, &holdSlider, &releaseSlider,
+        &depthSlider, &hpfSlider, &lpfSlider
+    };
+    for (auto* slider : sliders)
         addAndMakeVisible(*slider);
 
     auto& state = processor.getValueTreeState();
@@ -881,7 +884,6 @@ void AeroGateAudioProcessorEditor::resized()
     set(detectorScope, 728, 575, 328, 100);
 
     set(presetBox, 122, 711, 200, 28);
-    presetBox.setFont(uiFont(13.0f * s));
     set(presetPrev, 330, 711, 42, 28);
     set(presetNext, 378, 711, 42, 28);
 
