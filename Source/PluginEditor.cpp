@@ -758,8 +758,8 @@ void AeroGateAudioProcessorEditor::paint(juce::Graphics& g)
     g.drawText("RELEASE", rect(339, 458, 92, 18), juce::Justification::centred);
     g.drawText("DEPTH", rect(438, 458, 58, 18), juce::Justification::centred);
 
-    g.drawText("HPF", rect(728, 458, 92, 18), juce::Justification::centred);
-    g.drawText("LPF", rect(846, 458, 92, 18), juce::Justification::centred);
+    g.drawText("HPF", rect(742, 458, 104, 18), juce::Justification::centred);
+    g.drawText("LPF", rect(862, 458, 104, 18), juce::Justification::centred);
 
     const bool depthInf = processor.getValueTreeState().getRawParameterValue(
         AeroGateAudioProcessor::depthInfParamId)->load() >= 0.5f;
@@ -803,7 +803,7 @@ void AeroGateAudioProcessorEditor::paint(juce::Graphics& g)
         g.drawFittedText(
             "Drag the blue side of the centre control for Threshold. Drag the orange side for Close. "
             "Threshold moves Close with its current offset. Click Depth without dragging to toggle -inf. "
-            "The headphone button auditions the detector; HPF/LPF headphone buttons select a filter stage. "
+            "The headphone button auditions the filtered detector signal. "
             "External Sidechain uses the host sidechain bus. Ducking inverts the gate action.",
             rect(300, 270, 500, 180).toNearestInt(),
             juce::Justification::centred, 8);
