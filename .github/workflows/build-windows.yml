@@ -1,0 +1,40 @@
+name: Build Windows VST3
+
+on:
+  push:
+    branches: [ main, feature/initial ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-2022
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Configure CMake
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+
+      - name: Build AeroGate VST3
+        run: cmake --build build --config Release --target AeroGate_VST3 --parallel 2
+
+      - name: Stage VST3 bundle
+        shell: pwsh
+        run: |
+          $bundle = Get-ChildItem -Path build -Recurse -Directory -Filter "AeroGate.vst3" | Select-Object -First 1
+          if (-not $bundle) {
+            throw "AeroGate.vst3 was not found after the build."
+          }
+          New-Item -ItemType Directory -Force -Path package | Out-Null
+          Copy-Item -Path $bundle.FullName -Destination package -Recurse -Force
+
+      - name: Upload Windows VST3
+        uses: actions/upload-artifact@v7
+        with:
+          name: AeroGate-Windows-VST3
+          path: package/
+          if-no-files-found: error
+          retention-days: 30
