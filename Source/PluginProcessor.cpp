@@ -81,11 +81,6 @@ juce::AudioProcessorValueTreeState::ParameterLayout AeroGateAudioProcessor::crea
     layout.add(std::make_unique<juce::AudioParameterBool>(
         PID { audibleParamId, 1 }, "Audible", false));
 
-    layout.add(std::make_unique<juce::AudioParameterBool>(
-        PID { listenHpfParamId, 1 }, "Listen HPF", false));
-
-    layout.add(std::make_unique<juce::AudioParameterBool>(
-        PID { listenLpfParamId, 1 }, "Listen LPF", false));
 
     layout.add(std::make_unique<juce::AudioParameterBool>(
         PID { bypassParamId, 1 }, "Bypass", false));
@@ -103,13 +98,11 @@ void AeroGateAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBloc
         2
     };
 
-    for (auto* filter : { &bandHp, &bandLp, &hpOnly, &lpOnly })
+    for (auto* filter : { &bandHp, &bandLp })
         filter->prepare(spec);
 
     bandHp.setType(juce::dsp::StateVariableTPTFilterType::highpass);
-    hpOnly.setType(juce::dsp::StateVariableTPTFilterType::highpass);
     bandLp.setType(juce::dsp::StateVariableTPTFilterType::lowpass);
-    lpOnly.setType(juce::dsp::StateVariableTPTFilterType::lowpass);
 
     maxDelaySamples = juce::jmax(1, juce::roundToInt(sampleRate * 0.020) + samplesPerBlock + 4);
     delayBuffer.setSize(juce::jmax(2, getTotalNumOutputChannels()), maxDelaySamples, false, true, true);
@@ -129,7 +122,7 @@ void AeroGateAudioProcessor::releaseResources()
 
 void AeroGateAudioProcessor::resetDsp()
 {
-    for (auto* filter : { &bandHp, &bandLp, &hpOnly, &lpOnly })
+    for (auto* filter : { &bandHp, &bandLp })
         filter->reset();
 
     delayWriteIndex = 0;
@@ -173,8 +166,6 @@ void AeroGateAudioProcessor::updateFilterCutoffs()
 
     bandHp.setCutoffFrequency(safeHp);
     bandLp.setCutoffFrequency(safeLp);
-    hpOnly.setCutoffFrequency(juce::jlimit(20.0f, 2000.0f, requestedHp));
-    lpOnly.setCutoffFrequency(juce::jlimit(200.0f, 20000.0f, requestedLp));
 }
 
 void AeroGateAudioProcessor::updateLatency(float lookaheadMs)
@@ -290,8 +281,6 @@ void AeroGateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
     const bool depthInf = parameters.getRawParameterValue(depthInfParamId)->load() >= 0.5f;
     const bool ducking = parameters.getRawParameterValue(modeParamId)->load() >= 0.5f;
     const bool audible = parameters.getRawParameterValue(audibleParamId)->load() >= 0.5f;
-    const bool listenHpf = parameters.getRawParameterValue(listenHpfParamId)->load() >= 0.5f;
-    const bool listenLpf = parameters.getRawParameterValue(listenLpfParamId)->load() >= 0.5f;
     const bool bypassed = parameters.getRawParameterValue(bypassParamId)->load() >= 0.5f;
 
     updateFilterCutoffs();
@@ -299,21 +288,18 @@ void AeroGateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
 
     const float floorGain = depthInf ? 0.0f : juce::Decibels::decibelsToGain(depthDb);
 
-    std::array<float, 2> inputSamples {};
     std::array<float, 2> detectorBand {};
-    std::array<float, 2> detectorHp {};
-    std::array<float, 2> detectorLp {};
     std::array<float, 2> delayedSamples {};
 
     for (int sample = 0; sample < numSamples; ++sample)
     {
-        float inputPeak = 0.0f;
+        float inputScope = 0.0f;
+        const int scopeInputChannels = juce::jmax(1, juce::jmin(2, numInChannels));
 
         for (int ch = 0; ch < juce::jmin(2, numOutChannels); ++ch)
         {
             const float x = ch < numInChannels ? mainInput.getSample(ch, sample) : 0.0f;
-            inputSamples[static_cast<size_t>(ch)] = x;
-            inputPeak = juce::jmax(inputPeak, std::abs(x));
+            inputScope += x;
 
             delayBuffer.setSample(ch, delayWriteIndex, x);
             int readIndex = delayWriteIndex - currentLookaheadSamples;
@@ -321,22 +307,22 @@ void AeroGateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
                 readIndex += maxDelaySamples;
             delayedSamples[static_cast<size_t>(ch)] = delayBuffer.getSample(ch, readIndex);
         }
+        inputScope /= static_cast<float>(scopeInputChannels);
 
         float detectorPeak = 0.0f;
+        float detectorScope = 0.0f;
         const int detectorChannels = juce::jlimit(1, 2, detectorInput.getNumChannels());
 
         for (int ch = 0; ch < detectorChannels; ++ch)
         {
             const float raw = detectorInput.getSample(ch, sample);
-            const float hp = hpOnly.processSample(ch, raw);
-            const float lp = lpOnly.processSample(ch, raw);
             const float band = bandLp.processSample(ch, bandHp.processSample(ch, raw));
 
-            detectorHp[static_cast<size_t>(ch)] = hp;
-            detectorLp[static_cast<size_t>(ch)] = lp;
             detectorBand[static_cast<size_t>(ch)] = band;
             detectorPeak = juce::jmax(detectorPeak, std::abs(band));
+            detectorScope += band;
         }
+        detectorScope /= static_cast<float>(detectorChannels);
 
         const float detectorDb = dbFromLinear(detectorPeak);
         const float env = processGateEnvelope(detectorDb, thresholdDb, closeDb,
@@ -346,7 +332,7 @@ void AeroGateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
         const float duckGain = 1.0f - env * (1.0f - floorGain);
         const float appliedGain = ducking ? duckGain : gateGain;
 
-        float outputPeak = 0.0f;
+        float outputScope = 0.0f;
 
         for (int ch = 0; ch < numOutChannels; ++ch)
         {
@@ -357,12 +343,7 @@ void AeroGateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
                 if (audible)
                 {
                     const int detectorCh = juce::jmin(ch, detectorChannels - 1);
-                    if (listenHpf && !listenLpf)
-                        y = detectorHp[static_cast<size_t>(detectorCh)];
-                    else if (listenLpf && !listenHpf)
-                        y = detectorLp[static_cast<size_t>(detectorCh)];
-                    else
-                        y = detectorBand[static_cast<size_t>(detectorCh)];
+                    y = detectorBand[static_cast<size_t>(detectorCh)];
                 }
                 else
                 {
@@ -371,13 +352,17 @@ void AeroGateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
             }
 
             mainOutput.setSample(ch, sample, y);
-            outputPeak = juce::jmax(outputPeak, std::abs(y));
+            outputScope += y;
         }
+
+        outputScope /= static_cast<float>(juce::jmax(1, numOutChannels));
 
         if (++scopeCounter >= scopeDecimation)
         {
             scopeCounter = 0;
-            pushScopeFrame(inputPeak, outputPeak, detectorPeak);
+            pushScopeFrame(juce::jlimit(-1.0f, 1.0f, inputScope),
+                           juce::jlimit(-1.0f, 1.0f, outputScope),
+                           juce::jlimit(-1.0f, 1.0f, detectorScope));
         }
 
         if (++delayWriteIndex >= maxDelaySamples)
@@ -397,8 +382,8 @@ void AeroGateAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buff
 
     for (int sample = 0; sample < numSamples; ++sample)
     {
-        float inPeak = 0.0f;
-        float outPeak = 0.0f;
+        float inputScope = 0.0f;
+        float outputScope = 0.0f;
 
         for (int ch = 0; ch < output.getNumChannels(); ++ch)
         {
@@ -412,14 +397,20 @@ void AeroGateAudioProcessor::processBlockBypassed(juce::AudioBuffer<float>& buff
             const float y = delayBuffer.getSample(ch, readIndex);
             output.setSample(ch, sample, y);
 
-            inPeak = juce::jmax(inPeak, std::abs(x));
-            outPeak = juce::jmax(outPeak, std::abs(y));
+            inputScope += x;
+            outputScope += y;
         }
+
+        const float denom = static_cast<float>(juce::jmax(1, output.getNumChannels()));
+        inputScope /= denom;
+        outputScope /= denom;
 
         if (++scopeCounter >= scopeDecimation)
         {
             scopeCounter = 0;
-            pushScopeFrame(inPeak, outPeak, inPeak);
+            pushScopeFrame(juce::jlimit(-1.0f, 1.0f, inputScope),
+                           juce::jlimit(-1.0f, 1.0f, outputScope),
+                           juce::jlimit(-1.0f, 1.0f, inputScope));
         }
 
         if (++delayWriteIndex >= maxDelaySamples)
