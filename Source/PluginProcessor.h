@@ -92,6 +92,9 @@ private:
     juce::AbstractFifo scopeFifo { static_cast<int>(scopeFrames.size()) };
     int scopeDecimation = 32;
     int scopeCounter = 0;
+    float scopeInputPeak = 0.0f;
+    float scopeOutputPeak = 0.0f;
+    float scopeDetectorPeak = 0.0f;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(AeroGateAudioProcessor)
 };
