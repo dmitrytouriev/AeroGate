@@ -61,8 +61,6 @@ public:
     static constexpr const char* modeParamId = "mode";
     static constexpr const char* externalSidechainParamId = "externalSidechain";
     static constexpr const char* audibleParamId = "audible";
-    static constexpr const char* listenHpfParamId = "listenHpf";
-    static constexpr const char* listenLpfParamId = "listenLpf";
     static constexpr const char* bypassParamId = "bypass";
 
 private:
@@ -79,8 +77,6 @@ private:
 
     juce::dsp::StateVariableTPTFilter<float> bandHp;
     juce::dsp::StateVariableTPTFilter<float> bandLp;
-    juce::dsp::StateVariableTPTFilter<float> hpOnly;
-    juce::dsp::StateVariableTPTFilter<float> lpOnly;
 
     juce::AudioBuffer<float> delayBuffer;
     int delayWriteIndex = 0;
