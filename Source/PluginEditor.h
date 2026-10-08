@@ -16,6 +16,8 @@ public:
     void mouseDrag(const juce::MouseEvent&) override;
     void mouseDoubleClick(const juce::MouseEvent&) override;
     void pushFrame(const AeroGateAudioProcessor::ScopeFrame&);
+    // Faint reflected half-wave painted behind the lower controls.
+    void paintWaveReflection(juce::Graphics&, juce::Point<int> editorOrigin) const;
 
 private:
     enum class DragTarget { none, threshold, close };
@@ -129,6 +131,8 @@ private:
     aerosound::ui::DepthSlider depthSlider;
     juce::Slider hpfSlider;
     juce::Slider lpfSlider;
+    juce::ComboBox hpfSlopeBox;
+    juce::ComboBox lpfSlopeBox;
     juce::Label lookaheadUnit;
     juce::Label attackUnit;
     juce::Label holdUnit;
@@ -159,6 +163,8 @@ private:
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> depthAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> hpfAttachment;
     std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> lpfAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> hpfSlopeAttachment;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> lpfSlopeAttachment;
 
     BypassOverlay bypassOverlay;
     PopupOverlay helpOverlay { false };
