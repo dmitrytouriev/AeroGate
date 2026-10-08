@@ -866,7 +866,7 @@ void AeroGateAudioProcessorEditor::PopupOverlay::paint(juce::Graphics& g)
         drawCard(rect(365, 117, 380, 68),
                  "THRESHOLD opens the gate. CLOSE sets its lower closing level; click CLOSE to link.");
         drawCard(rect(43, 573, 361, 76),
-                 "LOOKAHEAD, ATTACK, HOLD and RELEASE shape the envelope. DEPTH controls attenuation.");
+                 "LOOKAHEAD sets timing. Drag ATTACK/RELEASE curves vertically for Fast, Linear or Slow. DEPTH goes to -80 dB or infinity.");
         drawCard(rect(515, 516, 184, 90),
                  "MODE selects Gate or Ducking. SIDECHAIN selects the detector source.");
         drawCard(rect(718, 570, 345, 82),
