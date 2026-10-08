@@ -555,71 +555,129 @@ void GateEnvelopePreview::paint(juce::Graphics& g)
 }
 
 //==============================================================================
-void DetectorScope::push(float value)
+
+DetectorScope::DetectorScope(AeroGateAudioProcessor& p) : processor(p)
 {
-    history.push_back(juce::jlimit(0.0f, 1.0f, value));
-    while (history.size() > 400)
-        history.pop_front();
-    repaint();
+    setInterceptsMouseClicks(false, false);
 }
 
 void DetectorScope::paint(juce::Graphics& g)
 {
-    auto r = getLocalBounds().toFloat().reduced(1.0f);
+    const auto bounds = getLocalBounds().toFloat().reduced(1.0f);
     g.setColour(juce::Colours::white.withAlpha(0.30f));
-    g.fillRoundedRectangle(r, 8.0f);
+    g.fillRoundedRectangle(bounds, 8.0f);
     g.setColour(juce::Colour(lineBlue).withAlpha(0.50f));
-    g.drawRoundedRectangle(r, 8.0f, 1.0f);
+    g.drawRoundedRectangle(bounds, 8.0f, 1.0f);
 
     g.setColour(juce::Colour(mutedInk));
-    g.setFont(uiFont(10.5f));
-    g.drawText("Detector Signal", r.reduced(10.0f, 5.0f).removeFromTop(17.0f),
+    g.setFont(uiFont(10.0f));
+    g.drawText("DETECTOR EQ", bounds.reduced(8.0f, 2.0f).removeFromTop(13.0f),
                juce::Justification::centredLeft);
 
-    auto chart = r.reduced(10.0f, 8.0f);
-    chart.removeFromTop(20.0f);
-
-    if (history.size() < 2)
+    auto plot = bounds.reduced(9.0f, 3.0f);
+    plot.removeFromTop(15.0f);
+    plot.removeFromBottom(11.0f);
+    if (plot.getWidth() <= 5.0f || plot.getHeight() <= 5.0f)
         return;
 
-    const float mid = chart.getCentreY();
-    const float half = chart.getHeight() * 0.42f;
+    const auto& state = processor.getValueTreeState();
+    const float hpHz = state.getRawParameterValue(AeroGateAudioProcessor::hpfParamId)->load();
+    const float lpHz = state.getRawParameterValue(AeroGateAudioProcessor::lpfParamId)->load();
+    const int hpSlope = juce::jlimit(0, 5, juce::roundToInt(
+        state.getRawParameterValue(AeroGateAudioProcessor::hpfSlopeParamId)->load()));
+    const int lpSlope = juce::jlimit(0, 5, juce::roundToInt(
+        state.getRawParameterValue(AeroGateAudioProcessor::lpfSlopeParamId)->load()));
+    constexpr int orders[] { 2, 3, 4, 6, 8, 16 };
+    const bool empty = hpHz >= lpHz;
 
-    g.setColour(juce::Colour(lineBlue).withAlpha(0.28f));
-    g.drawHorizontalLine(juce::roundToInt(mid), chart.getX(), chart.getRight());
-
-    juce::Path top;
-    juce::Path fill;
-
-    for (size_t i = 0; i < history.size(); ++i)
+    const auto xForHz = [&](float hz)
     {
-        const float x = chart.getX() + chart.getWidth() * static_cast<float>(i)
-                                      / static_cast<float>(history.size() - 1);
-        const float amp = std::sqrt(history[i]) * half;
-        const float y = mid - amp;
+        const float fraction = std::log(juce::jlimit(20.0f, 20000.0f, hz) / 20.0f)
+                               / std::log(1000.0f);
+        return plot.getX() + fraction * plot.getWidth();
+    };
 
+    // Logarithmic frequency axis: 20 Hz -> 20 kHz.
+    g.setColour(juce::Colour(lineBlue).withAlpha(0.25f));
+    for (float hz : { 20.0f, 100.0f, 1000.0f, 10000.0f, 20000.0f })
+    {
+        const float x = xForHz(hz);
+        g.drawVerticalLine(juce::roundToInt(x), plot.getY(), plot.getBottom());
+    }
+    for (float db : { 0.0f, -24.0f, -48.0f, -72.0f })
+    {
+        const float y = plot.getY() + (-db / 72.0f) * plot.getHeight();
+        g.drawHorizontalLine(juce::roundToInt(y), plot.getX(), plot.getRight());
+    }
+
+    const auto responseAt = [&](float hz)
+    {
+        if (empty)
+            return -72.0f;
+
+        // Butterworth magnitude approximation of the DSP cascades.
+        // The diagram shows the theoretical EQ curve, not an FFT spectrum.
+        const float highRatio = hpHz / hz;
+        const float lowRatio = hz / lpHz;
+        const double hpPower = std::pow(static_cast<double>(highRatio), 2 * orders[hpSlope]);
+        const double lpPower = std::pow(static_cast<double>(lowRatio), 2 * orders[lpSlope]);
+        const double attenuation = -10.0 * std::log10(1.0 + hpPower)
+                                   -10.0 * std::log10(1.0 + lpPower);
+        return juce::jlimit(-72.0f, 0.0f, static_cast<float>(attenuation));
+    };
+
+    juce::Path response;
+    constexpr int samples = 240;
+    for (int i = 0; i <= samples; ++i)
+    {
+        const float t = static_cast<float>(i) / static_cast<float>(samples);
+        const float hz = 20.0f * std::pow(1000.0f, t);
+        const float db = responseAt(hz);
+        const float x = plot.getX() + t * plot.getWidth();
+        const float y = plot.getY() + (-db / 72.0f) * plot.getHeight();
         if (i == 0)
-            top.startNewSubPath(x, y);
+            response.startNewSubPath(x, y);
         else
-            top.lineTo(x, y);
+            response.lineTo(x, y);
     }
 
-    fill = top;
-    for (int i = static_cast<int>(history.size()) - 1; i >= 0; --i)
+    juce::Path area = response;
+    area.lineTo(plot.getRight(), plot.getBottom());
+    area.lineTo(plot.getX(), plot.getBottom());
+    area.closeSubPath();
+
+    g.setColour(juce::Colour(0xff2aafdf).withAlpha(empty ? 0.08f : 0.25f));
+    g.fillPath(area);
+    g.setColour(juce::Colour(accentStrong).withAlpha(empty ? 0.36f : 0.95f));
+    g.strokePath(response, juce::PathStrokeType(1.8f,
+                  juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+
+    // Coloured cutoff guides: blue HPF and orange LPF.
+    g.setColour(juce::Colour(accentStrong).withAlpha(0.68f));
+    g.drawVerticalLine(juce::roundToInt(xForHz(hpHz)), plot.getY(), plot.getBottom());
+    g.setColour(juce::Colour(aerosound::ui::meterOrange).withAlpha(0.80f));
+    g.drawVerticalLine(juce::roundToInt(xForHz(lpHz)), plot.getY(), plot.getBottom());
+
+    g.setFont(uiFont(9.0f));
+    g.setColour(juce::Colour(mutedInk));
+    auto labels = bounds.reduced(8.0f, 1.0f).removeFromBottom(12.0f);
+    const float w = labels.getWidth();
+    g.drawText("20", labels.withWidth(w * 0.15f), juce::Justification::centredLeft);
+    g.drawText("100", labels.withX(labels.getX() + w * 0.17f).withWidth(w * 0.20f),
+               juce::Justification::centred);
+    g.drawText("1k", labels.withX(labels.getX() + w * 0.42f).withWidth(w * 0.18f),
+               juce::Justification::centred);
+    g.drawText("10k", labels.withX(labels.getX() + w * 0.72f).withWidth(w * 0.17f),
+               juce::Justification::centred);
+    g.drawText("20k", labels.withX(labels.getX() + w * 0.85f).withWidth(w * 0.15f),
+               juce::Justification::centredRight);
+
+    if (empty)
     {
-        const float x = chart.getX() + chart.getWidth() * static_cast<float>(i)
-                                      / static_cast<float>(history.size() - 1);
-        const float amp = std::sqrt(history[static_cast<size_t>(i)]) * half;
-        fill.lineTo(x, mid + amp);
+        g.setColour(juce::Colour(ink).withAlpha(0.84f));
+        g.setFont(uiFont(10.0f, juce::Font::bold));
+        g.drawText("NO PASSBAND", plot, juce::Justification::centred);
     }
-    fill.closeSubPath();
-
-    g.setColour(juce::Colour(0xff29aee8).withAlpha(0.35f));
-    g.fillPath(fill);
-    g.setColour(juce::Colour(0xff149ee3).withAlpha(0.90f));
-    g.strokePath(top, juce::PathStrokeType(1.0f,
-                                           juce::PathStrokeType::curved,
-                                           juce::PathStrokeType::rounded));
 }
 
 //==============================================================================
@@ -695,7 +753,7 @@ void AeroGateAudioProcessorEditor::PopupOverlay::paint(juce::Graphics& g)
         drawCard(rect(515, 516, 184, 90),
                  "MODE selects Gate or Ducking. SIDECHAIN selects the detector source.");
         drawCard(rect(718, 570, 345, 82),
-                 "HPF/LPF have independent 12-96 dB/oct slopes. Headphones audition the filtered detector.");
+                 "HPF/LPF shape the live detector EQ. INPUT shows the filtered detector; OUTPUT shows gated audio.");
         drawCard(rect(404, 656, 292, 51),
                  "Esc or click empty space to close Help.");
         return;
@@ -754,7 +812,8 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
     : AudioProcessorEditor(&p),
       processor(p),
       signalFlow(p),
-      gatePreview(p)
+      gatePreview(p),
+      detectorScope(p)
 {
     setOpaque(true);
     setResizable(true, true);
@@ -1432,7 +1491,6 @@ void AeroGateAudioProcessorEditor::timerCallback()
     while (processor.popScopeFrame(frame))
     {
         signalFlow.pushFrame(frame);
-        detectorScope.push(frame.detector);
         gotFrame = true;
     }
 
@@ -1442,6 +1500,8 @@ void AeroGateAudioProcessorEditor::timerCallback()
         signalFlow.repaint();
     }
 
+    // Frequency response changes with both cutoffs and slope automation.
+    detectorScope.repaint();
     refreshUnitLabels();
     updateButtonStates();
     updateDepthState();
