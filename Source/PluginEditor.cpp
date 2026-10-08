@@ -1215,7 +1215,7 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
         slider->updateText();
 
     for (auto* button : { &gateButton, &duckButton, &internalButton, &externalButton,
-                          &depthInfButton, &resetButton, &helpButton, &bypassButton, &donateButton,
+                          static_cast<juce::TextButton*>(&depthInfButton), &resetButton, &helpButton, &bypassButton, &donateButton,
                           &presetPrev, &presetNext })
     {
         setupSmallButton(*button);
