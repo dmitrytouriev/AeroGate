@@ -129,13 +129,31 @@ public:
         g.setColour(juce::Colour(accentStrong));
         g.fillRoundedRectangle(filled, filled.getWidth() * 0.5f);
 
-        const float knob = juce::jmax(15.0f, width * 0.52f);
-        auto thumb = juce::Rectangle<float>(knob, knob)
-                         .withCentre({ track.getCentreX(), sliderPos });
-        g.setColour(juce::Colours::white.withAlpha(0.96f));
-        g.fillEllipse(thumb);
-        g.setColour(juce::Colour(accentStrong));
-        g.drawEllipse(thumb, 1.5f);
+        if (slider.getName() == "Depth")
+        {
+            // Read the attenuation directly on the fader thumb.
+            auto thumb = juce::Rectangle<float>(juce::jmax(43.0f, width - 5.0f), 26.0f)
+                             .withCentre({ track.getCentreX(), sliderPos });
+            g.setColour(juce::Colours::white.withAlpha(0.98f));
+            g.fillRoundedRectangle(thumb, 8.0f);
+            g.setColour(juce::Colour(accentStrong));
+            g.drawRoundedRectangle(thumb, 8.0f, 1.5f);
+            g.setFont(font(11.5f, juce::Font::bold));
+            g.setColour(juce::Colour(ink));
+            g.drawFittedText(juce::String(slider.getValue(), 1),
+                             thumb.getSmallestIntegerContainer(),
+                             juce::Justification::centred, 1);
+        }
+        else
+        {
+            const float knob = juce::jmax(15.0f, width * 0.52f);
+            auto thumb = juce::Rectangle<float>(knob, knob)
+                             .withCentre({ track.getCentreX(), sliderPos });
+            g.setColour(juce::Colours::white.withAlpha(0.96f));
+            g.fillEllipse(thumb);
+            g.setColour(juce::Colour(accentStrong));
+            g.drawEllipse(thumb, 1.5f);
+        }
     }
 
     void drawButtonBackground(juce::Graphics& g, juce::Button& button,
@@ -219,6 +237,32 @@ public:
     std::function<void()> onClickWithoutDrag;
     std::function<void()> onDragStarted;
 
+    void setInfinity(bool enabled)
+    {
+        if (infinity != enabled)
+        {
+            infinity = enabled;
+            repaint();
+        }
+    }
+
+    void paint(juce::Graphics& g) override
+    {
+        if (!infinity)
+        {
+            juce::Slider::paint(g);
+            return;
+        }
+
+        // Leave the rail visible but hide its thumb: the thumb is now
+        // represented by the highlighted infinity button below.
+        const auto bounds = getLocalBounds().toFloat();
+        const auto rail = juce::Rectangle<float>(
+            bounds.getCentreX() - 4.0f, 6.0f, 8.0f, bounds.getHeight() - 12.0f);
+        g.setColour(juce::Colour(meterTrack).withAlpha(0.36f));
+        g.fillRoundedRectangle(rail, 4.0f);
+    }
+
     void mouseDown(const juce::MouseEvent& e) override
     {
         downPos = e.position;
@@ -250,5 +294,41 @@ public:
 private:
     juce::Point<float> downPos;
     bool didDrag = false;
+    bool infinity = false;
+};
+
+class DepthInfinityButton final : public juce::TextButton
+{
+public:
+    explicit DepthInfinityButton(const juce::String& label) : juce::TextButton(label) {}
+
+    void paintButton(juce::Graphics& g, bool hovered, bool down) override
+    {
+        const auto r = getLocalBounds().toFloat().reduced(1.5f);
+        const bool active = getToggleState();
+
+        g.setColour(active ? juce::Colour(0xffe4f7ff)
+                           : juce::Colours::white.withAlpha(0.58f));
+        g.fillRoundedRectangle(r, 8.0f);
+        g.setColour(active ? juce::Colour(accentStrong)
+                           : juce::Colour(lineBlue).withAlpha(0.90f));
+        g.drawRoundedRectangle(r, 8.0f, active ? 1.8f : 1.1f);
+
+        if (active)
+        {
+            // The same outlined thumb has dropped off the bottom of the rail.
+            const auto thumb = juce::Rectangle<float>(r.getWidth() - 7.0f, r.getHeight() - 5.0f)
+                                   .withCentre(r.getCentre());
+            g.setColour(juce::Colours::white);
+            g.fillRoundedRectangle(thumb, 7.0f);
+            g.setColour(juce::Colour(accentStrong));
+            g.drawRoundedRectangle(thumb, 7.0f, 1.7f);
+        }
+
+        g.setFont(font(12.5f, juce::Font::bold));
+        g.setColour(juce::Colour(active ? accentDark : ink)
+                        .withAlpha(down ? 0.72f : (hovered ? 1.0f : 0.92f)));
+        g.drawText(juce::String::fromUTF8("−∞"), r, juce::Justification::centred);
+    }
 };
 }
