@@ -237,7 +237,7 @@ void AeroGateAudioProcessor::updateFilterCutoffs()
             // Butterworth poles: each 12 dB/oct section has its own Q.
             // This maintains a ~-3 dB corner when multiple sections are cascaded.
             const float angle = juce::MathConstants<float>::pi *
-                                static_cast<float>(2 * i + 1) /
+                                static_cast<float>((order % 2 != 0) ? (2 * i + 2) : (2 * i + 1)) /
                                 static_cast<float>(2 * order);
             const float q = 1.0f / (2.0f * std::cos(angle));
             filters[static_cast<size_t>(i)].setResonance(q);
