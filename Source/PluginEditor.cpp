@@ -595,10 +595,10 @@ void GateEnvelopePreview::paint(juce::Graphics& g)
     // Parent editor labels would otherwise be hidden behind this full-panel child.
     g.setFont(uiFont(11.5f));
     g.setColour(juce::Colour(mutedInk));
-    g.drawText("LOOKAHEAD", juce::Rectangle<int>(0, 3, 94, 18), juce::Justification::centred);
-    g.drawText("ATTACK", juce::Rectangle<int>(98, 3, 92, 18), juce::Justification::centred);
-    g.drawText("HOLD", juce::Rectangle<int>(196, 3, 92, 18), juce::Justification::centred);
-    g.drawText("RELEASE", juce::Rectangle<int>(294, 3, 92, 18), juce::Justification::centred);
+    g.drawText("LOOKAHEAD", juce::Rectangle<int>(0, 126, 94, 18), juce::Justification::centred);
+    g.drawText("ATTACK", juce::Rectangle<int>(98, 126, 92, 18), juce::Justification::centred);
+    g.drawText("HOLD", juce::Rectangle<int>(196, 126, 92, 18), juce::Justification::centred);
+    g.drawText("RELEASE", juce::Rectangle<int>(294, 126, 92, 18), juce::Justification::centred);
     g.drawText("DEPTH", juce::Rectangle<int>(390, 3, 58, 18), juce::Justification::centred);
 
     const float depthReadout = processor.getValueTreeState().getRawParameterValue(
@@ -607,7 +607,7 @@ void GateEnvelopePreview::paint(juce::Graphics& g)
     g.setColour(juce::Colour(ink));
     g.drawText(depthInf ? juce::String::fromUTF8("−∞")
                         : juce::String(depthReadout, 1) + " dB",
-               juce::Rectangle<int>(390, 98, 58, 21), juce::Justification::centred);
+               juce::Rectangle<int>(384, 181, 64, 19), juce::Justification::centred);
 }
 
 void GateEnvelopePreview::mouseDown(const juce::MouseEvent& e)
@@ -699,8 +699,8 @@ void DetectorScope::paint(juce::Graphics& g)
     // Full-panel EQ: labels are painted inside the child, above floating knobs.
     g.setColour(juce::Colour(mutedInk));
     g.setFont(uiFont(11.5f));
-    g.drawText("HPF", juce::Rectangle<int>(14, 3, 104, 18), juce::Justification::centred);
-    g.drawText("LPF", juce::Rectangle<int>(134, 3, 104, 18), juce::Justification::centred);
+    g.drawText("HPF", juce::Rectangle<int>(7, 107, 90, 18), juce::Justification::centred);
+    g.drawText("LPF", juce::Rectangle<int>(232, 107, 90, 18), juce::Justification::centred);
 
     auto plot = bounds.reduced(9.0f, 3.0f);
     plot.removeFromTop(15.0f);
@@ -1407,16 +1407,18 @@ void AeroGateAudioProcessorEditor::resized()
 
     set(signalFlow, 28, 90, 1044, 300);
 
-    set(lookaheadSlider, 45, 475, 92, 82);
-    set(attackSlider, 143, 475, 92, 82);
-    set(holdSlider, 241, 475, 92, 82);
-    set(releaseSlider, 339, 475, 92, 82);
-    set(lookaheadUnit, 121, 534, 21, 20);
-    set(attackUnit, 219, 534, 21, 20);
-    set(holdUnit, 317, 534, 21, 20);
-    set(releaseUnit, 415, 534, 21, 20);
-    set(depthSlider, 445, 478, 50, 72);
-    set(depthInfButton, 438, 576, 60, 28);
+    // The four time knobs form a compact row at the very bottom of GATE.
+    set(lookaheadSlider, 45, 591, 92, 85);
+    set(attackSlider, 143, 591, 92, 85);
+    set(holdSlider, 241, 591, 92, 85);
+    set(releaseSlider, 339, 591, 92, 85);
+    set(lookaheadUnit, 121, 654, 21, 20);
+    set(attackUnit, 219, 654, 21, 20);
+    set(holdUnit, 317, 654, 21, 20);
+    set(releaseUnit, 415, 654, 21, 20);
+    // DEPTH spans almost the full block height, unlike the small time knobs.
+    set(depthSlider, 444, 480, 52, 152);
+    set(depthInfButton, 438, 653, 60, 27);
     // Full-panel envelope: sliders sit visually on top of the curve.
     set(gatePreview, 44, 455, 448, 220);
 
@@ -1425,13 +1427,15 @@ void AeroGateAudioProcessorEditor::resized()
     set(internalButton, 536, 615, 74, 38);
     set(externalButton, 612, 615, 72, 38);
 
-    set(hpfSlider, 742, 475, 104, 78);
-    set(lpfSlider, 862, 475, 104, 78);
-    set(hpfUnit, 825, 534, 38, 20);
-    set(lpfUnit, 945, 534, 38, 20);
-    set(hpfSlopeBox, 750, 558, 108, 24);
-    set(lpfSlopeBox, 870, 558, 108, 24);
-    set(audibleButton, 986, 482, 58, 58);
+    // Detector cutoffs occupy opposite edges, leaving the response curve open.
+    set(hpfSlider, 733, 568, 92, 80);
+    set(lpfSlider, 960, 568, 92, 80);
+    set(hpfUnit, 810, 627, 39, 20);
+    set(lpfUnit, 1035, 627, 31, 20);
+    set(hpfSlopeBox, 735, 654, 108, 26);
+    set(lpfSlopeBox, 949, 654, 108, 26);
+    // Small headphone icon beside the DETECTOR heading.
+    set(audibleButton, 853, 413, 32, 32);
     // Full-panel detector EQ with HPF/LPF knobs floating above it.
     set(detectorScope, 728, 455, 328, 220);
 
