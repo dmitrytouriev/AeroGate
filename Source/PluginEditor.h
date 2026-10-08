@@ -59,7 +59,7 @@ private:
     enum class Segment { none, attack, release };
     AeroGateAudioProcessor& processor;
     Segment dragging = Segment::none;
-    juce::AudioProcessorParameter* dragParameter = nullptr;
+    juce::RangedAudioParameter* dragParameter = nullptr;
     float mouseStartY = 0.0f;
     bool gestureStarted = false;
 };
