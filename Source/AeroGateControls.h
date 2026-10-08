@@ -13,6 +13,15 @@ public:
         setColour(juce::Slider::textBoxTextColourId, juce::Colour(ink));
         setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
         setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
+        // High-contrast selected digits while editing slider value labels.
+        setColour(juce::Slider::textBoxHighlightColourId, juce::Colour(0xff166fb0));
+        setColour(juce::TextEditor::highlightColourId, juce::Colour(0xff166fb0));
+        setColour(juce::TextEditor::highlightedTextColourId, juce::Colours::white);
+        setColour(juce::TextEditor::textColourId, juce::Colour(ink));
+        setColour(juce::TextEditor::backgroundColourId, juce::Colours::white);
+        setColour(juce::Label::textWhenEditingColourId, juce::Colour(ink));
+        setColour(juce::Label::backgroundWhenEditingColourId, juce::Colours::white);
+        setColour(juce::Label::outlineWhenEditingColourId, juce::Colour(accentStrong));
         setColour(juce::TextButton::buttonColourId, juce::Colours::white.withAlpha(0.48f));
         setColour(juce::TextButton::buttonOnColourId, juce::Colour(accentStrong));
         setColour(juce::TextButton::textColourOffId, juce::Colour(ink));
