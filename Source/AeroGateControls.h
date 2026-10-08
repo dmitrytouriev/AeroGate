@@ -56,43 +56,56 @@ public:
                           float sliderPosProportional, float rotaryStartAngle,
                           float rotaryEndAngle, juce::Slider&) override
     {
-        auto bounds = juce::Rectangle<float>(static_cast<float>(x), static_cast<float>(y),
-                                             static_cast<float>(width), static_cast<float>(height))
-                          .reduced(7.0f);
-        const float radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.5f;
-        const auto centre = bounds.getCentre();
-        const float start = rotaryStartAngle;
-        const float end = rotaryEndAngle;
-        const float valueAngle = start + sliderPosProportional * (end - start);
+        // A true circular frosted Aerosound dial, even if the JUCE control is wide.
+        // The old ellipse came from shrinking a non-square component rectangle.
+        const float cx = x + width * 0.5f;
+        const float cy = y + height * 0.5f;
+        const float radius = juce::jmax(11.0f,
+            juce::jmin(static_cast<float>(width), static_cast<float>(height)) * 0.5f - 4.0f);
+        const float dialR = radius * 0.72f;
+        const float valueAngle = rotaryStartAngle
+            + sliderPosProportional * (rotaryEndAngle - rotaryStartAngle);
 
         juce::Path track;
-        track.addCentredArc(centre.x, centre.y, radius - 3.0f, radius - 3.0f,
-                            0.0f, start, end, true);
-        g.setColour(juce::Colour(0xff8db8cf).withAlpha(0.28f));
-        g.strokePath(track, juce::PathStrokeType(7.5f, juce::PathStrokeType::curved,
-                                                 juce::PathStrokeType::rounded));
+        track.addCentredArc(cx, cy, radius - 1.2f, radius - 1.2f, 0.0f,
+                            rotaryStartAngle, rotaryEndAngle, true);
+        g.setColour(juce::Colour(0xff8eb7cd).withAlpha(0.32f));
+        g.strokePath(track, juce::PathStrokeType(4.0f,
+                     juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
-        juce::Path value;
-        value.addCentredArc(centre.x, centre.y, radius - 3.0f, radius - 3.0f,
-                            0.0f, start, valueAngle, true);
+        juce::Path amount;
+        amount.addCentredArc(cx, cy, radius - 1.2f, radius - 1.2f, 0.0f,
+                             rotaryStartAngle, valueAngle, true);
         g.setColour(juce::Colour(accentStrong));
-        g.strokePath(value, juce::PathStrokeType(7.5f, juce::PathStrokeType::curved,
-                                                 juce::PathStrokeType::rounded));
+        g.strokePath(amount, juce::PathStrokeType(4.3f,
+                     juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
-        g.setColour(juce::Colours::white.withAlpha(0.92f));
-        g.fillEllipse(bounds.reduced(9.0f));
-        g.setColour(juce::Colour(lineBlue).withAlpha(0.62f));
-        g.drawEllipse(bounds.reduced(9.0f), 1.0f);
+        // Shadow + soft gradient dial instead of the old flat white oval.
+        g.setColour(juce::Colour(0xff5798b9).withAlpha(0.12f));
+        g.fillEllipse(cx - dialR + 0.8f, cy - dialR + 2.5f, 2.0f * dialR, 2.0f * dialR);
+        juce::ColourGradient face(juce::Colours::white.withAlpha(0.99f),
+                                  cx - dialR * 0.50f, cy - dialR * 0.75f,
+                                  juce::Colour(0xffd2effd).withAlpha(0.98f),
+                                  cx + dialR * 0.60f, cy + dialR * 0.80f, false);
+        g.setGradientFill(face);
+        g.fillEllipse(cx - dialR, cy - dialR, 2.0f * dialR, 2.0f * dialR);
+        g.setColour(juce::Colour(0xff77b4d8).withAlpha(0.74f));
+        g.drawEllipse(cx - dialR, cy - dialR, 2.0f * dialR, 2.0f * dialR, 1.1f);
 
-        const float pointerLength = radius * 0.48f;
-        const float pointerThickness = 2.0f;
-        juce::Path pointer;
-        pointer.addRoundedRectangle(-pointerThickness * 0.5f, -radius * 0.48f,
-                                    pointerThickness, pointerLength, 1.0f);
-        pointer.applyTransform(juce::AffineTransform::rotation(valueAngle)
-                                   .translated(centre.x, centre.y));
-        g.setColour(juce::Colour(accentDark).withAlpha(0.86f));
-        g.fillPath(pointer);
+        const float innerR = dialR * 0.78f;
+        g.setColour(juce::Colours::white.withAlpha(0.44f));
+        g.drawEllipse(cx - innerR, cy - innerR, 2.0f * innerR, 2.0f * innerR, 0.8f);
+
+        // Deliberately high-contrast pointer: angle is visually unambiguous.
+        const float startR = dialR * 0.20f;
+        const float endR = dialR * 0.73f;
+        g.setColour(juce::Colour(accentDark));
+        g.drawLine(cx + std::sin(valueAngle) * startR,
+                   cy - std::cos(valueAngle) * startR,
+                   cx + std::sin(valueAngle) * endR,
+                   cy - std::cos(valueAngle) * endR,
+                   juce::jmax(2.1f, dialR * 0.13f));
+        g.fillEllipse(cx - 2.3f, cy - 2.3f, 4.6f, 4.6f);
     }
 
     void drawLinearSlider(juce::Graphics& g, int x, int y, int width, int height,
