@@ -30,6 +30,8 @@ private:
     void drawWaveform(juce::Graphics&, juce::Rectangle<float>,
                       const std::deque<float>&, bool newestAtRight) const;
     void setParameterValue(juce::Slider&, double);
+    void setCloseEnabled(bool enabled);
+    void syncCloseState();
 
     AeroGateAudioProcessor& processor;
     juce::Slider thresholdValue;
@@ -44,6 +46,7 @@ private:
     float dragStartY = 0.0f;
     double dragStartValue = 0.0;
     double thresholdCloseGap = 6.0;
+    double lastUsableCloseGap = 6.0;
 };
 
 class GateEnvelopePreview final : public juce::Component
@@ -61,6 +64,7 @@ private:
     Segment dragging = Segment::none;
     juce::RangedAudioParameter* dragParameter = nullptr;
     float mouseStartY = 0.0f;
+    int currentCurveShape = 1;
     bool gestureStarted = false;
 };
 
