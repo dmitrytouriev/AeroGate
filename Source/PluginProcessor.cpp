@@ -219,8 +219,11 @@ bool AeroGateAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) 
 
 void AeroGateAudioProcessor::updateFilterCutoffs()
 {
-    const float hp = parameters.getRawParameterValue(hpfParamId)->load();
+    const float requestedHp = parameters.getRawParameterValue(hpfParamId)->load();
     const float lp = parameters.getRawParameterValue(lpfParamId)->load();
+    // Preserve a non-inverted detector even if the host automates both
+    // parameters simultaneously while the editor is closed.
+    const float hp = juce::jmin(requestedHp, lp);
 
     const float nyquistLimit = static_cast<float>(currentSampleRate * 0.45);
     // Cutoffs are INDEPENDENT. The old cross-clamping silently lowered HPF
@@ -295,7 +298,8 @@ void AeroGateAudioProcessor::updateFilterCutoffs()
 float AeroGateAudioProcessor::filterHighPass(float sample, int channel) noexcept
 {
     // HPF at the minimum (20 Hz) is a true bypass, not a 20 Hz roll-off.
-    if (parameters.getRawParameterValue(hpfParamId)->load() <= 20.05f)
+    if (juce::jmin(parameters.getRawParameterValue(hpfParamId)->load(),
+                   parameters.getRawParameterValue(lpfParamId)->load()) <= 20.05f)
         return sample;
 
     for (int i = 0; i < hpStageCount; ++i)
@@ -459,15 +463,8 @@ void AeroGateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
     updateFilterCutoffs();
     updateLatency(lookaheadMs);
 
-    // Inverted HPF/LPF limits define an empty detector passband.
-    // Keep filters updated but hard-mute the detector so Audition is silent
-    // and no spurious low-frequency leakage opens the gate.
-    const float actualHp = parameters.getRawParameterValue(hpfParamId)->load();
-    const float actualLp = parameters.getRawParameterValue(lpfParamId)->load();
-    const bool hpOff = actualHp <= 20.05f;
-    const bool lpOff = actualLp >= 19999.0f;
-    const bool emptyDetectorBand = !hpOff && !lpOff && actualHp >= actualLp;
-
+    // Effective HPF is clamped to LPF in updateFilterCutoffs().
+    // Equality is permitted: do not hard-mute the detector.
     const float floorGain = depthInf ? 0.0f : juce::Decibels::decibelsToGain(depthDb);
 
     std::array<float, 2> detectorBand {};
@@ -493,7 +490,7 @@ void AeroGateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
         {
             const float raw = detectorInput.getSample(ch, sample);
             const float filtered = filterLowPass(filterHighPass(raw, ch), ch);
-            const float band = emptyDetectorBand ? 0.0f : filtered;
+            const float band = filtered;
 
             detectorBand[static_cast<size_t>(ch)] = band;
             detectorPeak = juce::jmax(detectorPeak, std::abs(band));
