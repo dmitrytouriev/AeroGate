@@ -97,11 +97,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout AeroGateAudioProcessor::crea
 
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         PID { hpfParamId, 1 }, "Detector HPF",
-        makeSkewedRange(20.0f, 2000.0f, 160.0f), 20.0f, makeHzAttributes()));
+        makeSkewedRange(20.0f, 20000.0f, 160.0f), 20.0f, makeHzAttributes()));
 
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         PID { lpfParamId, 1 }, "Detector LPF",
-        makeSkewedRange(200.0f, 20000.0f, 2000.0f), 1000.0f, makeHzAttributes()));
+        makeSkewedRange(20.0f, 20000.0f, 2000.0f), 1000.0f, makeHzAttributes()));
 
     const juce::StringArray slopes { "12", "18", "24", "36", "48", "96" };
     layout.add(std::make_unique<juce::AudioParameterChoice>(
@@ -214,10 +214,11 @@ void AeroGateAudioProcessor::updateFilterCutoffs()
     const float lp = parameters.getRawParameterValue(lpfParamId)->load();
 
     const float nyquistLimit = static_cast<float>(currentSampleRate * 0.45);
-    const float safeHp = juce::jlimit(20.0f, juce::jmin(19000.0f, nyquistLimit),
-                                     juce::jmin(hp, lp * 0.95f));
-    const float safeLp = juce::jlimit(30.0f, juce::jmin(20000.0f, nyquistLimit),
-                                     juce::jmax(lp, safeHp * 1.05f));
+    // Cutoffs are INDEPENDENT. The old cross-clamping silently lowered HPF
+    // when it exceeded LPF (e.g. HPF=2000, LPF=200 turned into ~190/200).
+    // That accidentally passed low frequencies through the Audible path.
+    const float safeHp = juce::jlimit(20.0f, juce::jmin(20000.0f, nyquistLimit), hp);
+    const float safeLp = juce::jlimit(20.0f, juce::jmin(20000.0f, nyquistLimit), lp);
 
     const int hpChoice = juce::jlimit(0, 5, juce::roundToInt(
         parameters.getRawParameterValue(hpfSlopeParamId)->load()));
@@ -430,6 +431,13 @@ void AeroGateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
     updateFilterCutoffs();
     updateLatency(lookaheadMs);
 
+    // Inverted HPF/LPF limits define an empty detector passband.
+    // Keep filters updated but hard-mute the detector so Audition is silent
+    // and no spurious low-frequency leakage opens the gate.
+    const bool emptyDetectorBand =
+        parameters.getRawParameterValue(hpfParamId)->load()
+        >= parameters.getRawParameterValue(lpfParamId)->load();
+
     const float floorGain = depthInf ? 0.0f : juce::Decibels::decibelsToGain(depthDb);
 
     std::array<float, 2> detectorBand {};
@@ -437,13 +445,9 @@ void AeroGateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
 
     for (int sample = 0; sample < numSamples; ++sample)
     {
-        float inputScope = 0.0f;
-        const int scopeInputChannels = juce::jmax(1, juce::jmin(2, numInChannels));
-
         for (int ch = 0; ch < juce::jmin(2, numOutChannels); ++ch)
         {
             const float x = ch < numInChannels ? mainInput.getSample(ch, sample) : 0.0f;
-            inputScope += x;
 
             delayBuffer.setSample(ch, delayWriteIndex, x);
             int readIndex = delayWriteIndex - currentLookaheadSamples;
@@ -451,22 +455,19 @@ void AeroGateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
                 readIndex += maxDelaySamples;
             delayedSamples[static_cast<size_t>(ch)] = delayBuffer.getSample(ch, readIndex);
         }
-        inputScope /= static_cast<float>(scopeInputChannels);
 
         float detectorPeak = 0.0f;
-        float detectorScope = 0.0f;
         const int detectorChannels = juce::jlimit(1, 2, detectorInput.getNumChannels());
 
         for (int ch = 0; ch < detectorChannels; ++ch)
         {
             const float raw = detectorInput.getSample(ch, sample);
-            const float band = filterLowPass(filterHighPass(raw, ch), ch);
+            const float filtered = filterLowPass(filterHighPass(raw, ch), ch);
+            const float band = emptyDetectorBand ? 0.0f : filtered;
 
             detectorBand[static_cast<size_t>(ch)] = band;
             detectorPeak = juce::jmax(detectorPeak, std::abs(band));
-            detectorScope += band;
         }
-        detectorScope /= static_cast<float>(detectorChannels);
 
         const float detectorDb = dbFromLinear(detectorPeak);
         const float env = processGateEnvelope(detectorDb, thresholdDb, closeDb,
@@ -501,9 +502,11 @@ void AeroGateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
 
         outputScope /= static_cast<float>(juce::jmax(1, numOutChannels));
 
-        scopeInputPeak = juce::jmax(scopeInputPeak, std::abs(inputScope));
+        // INPUT scope = the exact filtered detector peaks used for Threshold/Close.
+        // OUTPUT scope remains the post-gate audio and is deliberately unchanged.
+        scopeInputPeak = juce::jmax(scopeInputPeak, detectorPeak);
         scopeOutputPeak = juce::jmax(scopeOutputPeak, std::abs(outputScope));
-        scopeDetectorPeak = juce::jmax(scopeDetectorPeak, std::abs(detectorScope));
+        scopeDetectorPeak = juce::jmax(scopeDetectorPeak, detectorPeak);
 
         if (++scopeCounter >= scopeDecimation)
         {
