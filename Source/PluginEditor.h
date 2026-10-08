@@ -103,6 +103,7 @@ private:
     void timerCallback() override;
     void setupRotary(juce::Slider&, const juce::String& suffix, int decimals);
     void setupSmallButton(juce::TextButton&);
+    void refreshUnitLabels();
     void setParameterValue(const char* id, float value);
     void resetDefaults();
     void applyPreset(int index);
@@ -128,6 +129,12 @@ private:
     aerosound::ui::DepthSlider depthSlider;
     juce::Slider hpfSlider;
     juce::Slider lpfSlider;
+    juce::Label lookaheadUnit;
+    juce::Label attackUnit;
+    juce::Label holdUnit;
+    juce::Label releaseUnit;
+    juce::Label hpfUnit;
+    juce::Label lpfUnit;
 
     juce::TextButton gateButton { "Gate" };
     juce::TextButton duckButton { "Ducking" };
