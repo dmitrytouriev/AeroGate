@@ -32,6 +32,26 @@ public:
         setColour(juce::ComboBox::arrowColourId, juce::Colour(accentDark));
     }
 
+    juce::Label* createSliderTextBox(juce::Slider& slider) override
+    {
+        auto* label = juce::LookAndFeel_V4::createSliderTextBox(slider);
+        if (label != nullptr)
+        {
+            label->onEditorShow = [label]
+            {
+                if (auto* editor = label->getCurrentTextEditor())
+                {
+                    editor->setColour(juce::TextEditor::highlightColourId, juce::Colour(0xff166fb0));
+                    editor->setColour(juce::TextEditor::highlightedTextColourId, juce::Colours::white);
+                    editor->setColour(juce::TextEditor::textColourId, juce::Colour(ink));
+                    editor->setColour(juce::TextEditor::backgroundColourId, juce::Colours::white);
+                    editor->applyColourToAllText(juce::Colour(ink));
+                }
+            };
+        }
+        return label;
+    }
+
     void drawRotarySlider(juce::Graphics& g, int x, int y, int width, int height,
                           float sliderPosProportional, float rotaryStartAngle,
                           float rotaryEndAngle, juce::Slider&) override
