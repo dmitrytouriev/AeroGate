@@ -38,6 +38,8 @@ constexpr float overlayDimAlpha = 0.12f;
 constexpr float overlayShadowAlpha = 0.10f;
 constexpr float overlayCardFillAlpha = 0.98f;
 constexpr float overlayCardBorderAlpha = 0.86f;
+constexpr float overlayCardWidth = 330.0f;
+constexpr float overlayCardHeight = 390.0f;
 constexpr float overlayCardRadius = 12.0f;
 
 constexpr std::uint32_t tooltipDelayMs = 1200u;
