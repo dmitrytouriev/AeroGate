@@ -591,11 +591,11 @@ void GateEnvelopePreview::paint(juce::Graphics& g)
     // Parent editor labels would otherwise be hidden behind this full-panel child.
     g.setFont(uiFont(11.5f));
     g.setColour(juce::Colour(mutedInk));
-    g.drawText("LOOKAHEAD", { 0, 3, 94, 18 }, juce::Justification::centred);
-    g.drawText("ATTACK", { 98, 3, 92, 18 }, juce::Justification::centred);
-    g.drawText("HOLD", { 196, 3, 92, 18 }, juce::Justification::centred);
-    g.drawText("RELEASE", { 294, 3, 92, 18 }, juce::Justification::centred);
-    g.drawText("DEPTH", { 390, 3, 58, 18 }, juce::Justification::centred);
+    g.drawText("LOOKAHEAD", juce::Rectangle<int>(0, 3, 94, 18), juce::Justification::centred);
+    g.drawText("ATTACK", juce::Rectangle<int>(98, 3, 92, 18), juce::Justification::centred);
+    g.drawText("HOLD", juce::Rectangle<int>(196, 3, 92, 18), juce::Justification::centred);
+    g.drawText("RELEASE", juce::Rectangle<int>(294, 3, 92, 18), juce::Justification::centred);
+    g.drawText("DEPTH", juce::Rectangle<int>(390, 3, 58, 18), juce::Justification::centred);
 
     const float depthReadout = processor.getValueTreeState().getRawParameterValue(
         AeroGateAudioProcessor::depthParamId)->load();
@@ -603,7 +603,7 @@ void GateEnvelopePreview::paint(juce::Graphics& g)
     g.setColour(juce::Colour(ink));
     g.drawText(depthInf ? juce::String::fromUTF8("−∞")
                         : juce::String(depthReadout, 1) + " dB",
-               { 390, 98, 58, 21 }, juce::Justification::centred);
+               juce::Rectangle<int>(390, 98, 58, 21), juce::Justification::centred);
 }
 
 void GateEnvelopePreview::mouseDown(const juce::MouseEvent& e)
@@ -695,8 +695,8 @@ void DetectorScope::paint(juce::Graphics& g)
     // Full-panel EQ: labels are painted inside the child, above floating knobs.
     g.setColour(juce::Colour(mutedInk));
     g.setFont(uiFont(11.5f));
-    g.drawText("HPF", { 14, 3, 104, 18 }, juce::Justification::centred);
-    g.drawText("LPF", { 134, 3, 104, 18 }, juce::Justification::centred);
+    g.drawText("HPF", juce::Rectangle<int>(14, 3, 104, 18), juce::Justification::centred);
+    g.drawText("LPF", juce::Rectangle<int>(134, 3, 104, 18), juce::Justification::centred);
 
     auto plot = bounds.reduced(9.0f, 3.0f);
     plot.removeFromTop(15.0f);
