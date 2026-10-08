@@ -3,6 +3,19 @@
 #include <JuceHeader.h>
 #include <array>
 #include <atomic>
+#include <cmath>
+
+// Shared between DSP and editor so the drawn and audible curves are identical.
+namespace aerogate::envelope
+{
+inline float easedProgress(float t, int shape) noexcept
+{
+    t = juce::jlimit(0.0f, 1.0f, t);
+    if (shape == 0) return 1.0f - std::pow(1.0f - t, 2.5f); // Fast
+    if (shape == 2) return std::pow(t, 2.5f);               // Slow
+    return t;                                                 // Linear
+}
+}
 
 class AeroGateAudioProcessor final : public juce::AudioProcessor
 {
@@ -55,6 +68,8 @@ public:
     static constexpr const char* attackParamId = "attack";
     static constexpr const char* holdParamId = "hold";
     static constexpr const char* releaseParamId = "release";
+    static constexpr const char* attackCurveParamId = "attackCurve";
+    static constexpr const char* releaseCurveParamId = "releaseCurve";
     static constexpr const char* depthParamId = "depth";
     static constexpr const char* depthInfParamId = "depthInf";
     static constexpr const char* hpfParamId = "hpf";
@@ -105,6 +120,9 @@ private:
 
     double currentSampleRate = 48000.0;
     float gateEnvelope = 0.0f;
+    float envelopeStageStart = 0.0f;
+    float envelopeStageProgress = 1.0f;
+    bool envelopeStageRising = false;
     bool gateLatched = false;
     int holdRemainingSamples = 0;
 
