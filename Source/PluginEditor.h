@@ -59,11 +59,11 @@ private:
 class DetectorScope final : public juce::Component
 {
 public:
-    void push(float value);
+    explicit DetectorScope(AeroGateAudioProcessor&);
     void paint(juce::Graphics&) override;
 
 private:
-    std::deque<float> history;
+    AeroGateAudioProcessor& processor;
 };
 
 class AeroGateAudioProcessorEditor final : public juce::AudioProcessorEditor,
