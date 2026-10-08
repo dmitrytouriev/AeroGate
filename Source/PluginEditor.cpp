@@ -1047,25 +1047,29 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
     for (auto* slider : { &lookaheadSlider, &attackSlider, &holdSlider, &releaseSlider })
         formatMilliseconds(*slider);
 
-    const auto formatFrequency = [](juce::Slider& slider, juce::Label& unit)
+    const auto formatFrequency = [](juce::Slider& slider, juce::Label& unit, bool highPass)
     {
         slider.setTextValueSuffix({});
         slider.setNumDecimalPlacesToDisplay(1);
-        slider.textFromValueFunction = [](double value)
+        slider.textFromValueFunction = [highPass](double value)
         {
+            if ((highPass && value <= 20.05) || (!highPass && value >= 19999.0))
+                return juce::String("Off");
             return value >= 999.95
                 ? juce::String(value / 1000.0, 1)
                 : juce::String(value, 1);
         };
-        slider.valueFromTextFunction = [&unit](const juce::String& text)
+        slider.valueFromTextFunction = [&unit, highPass](const juce::String& text)
         {
+            if (text.trim().equalsIgnoreCase("Off"))
+                return highPass ? 20.0 : 20000.0;
             const double scale = unit.getText() == "kHz" ? 1000.0 : 1.0;
             return text.getDoubleValue() * scale;
         };
     };
 
-    formatFrequency(hpfSlider, hpfUnit);
-    formatFrequency(lpfSlider, lpfUnit);
+    formatFrequency(hpfSlider, hpfUnit, true);
+    formatFrequency(lpfSlider, lpfUnit, false);
 
     for (auto* unit : { &lookaheadUnit, &attackUnit, &holdUnit, &releaseUnit,
                          &hpfUnit, &lpfUnit })
@@ -1240,9 +1244,12 @@ void AeroGateAudioProcessorEditor::setupRotary(juce::Slider& slider,
 
 void AeroGateAudioProcessorEditor::refreshUnitLabels()
 {
-    const auto refresh = [](juce::Slider& slider, juce::Label& label)
+    const auto refresh = [](juce::Slider& slider, juce::Label& label, bool highPass)
     {
-        const juce::String expected = slider.getValue() >= 999.95 ? "kHz" : "Hz";
+        const bool off = highPass ? slider.getValue() <= 20.05
+                                  : slider.getValue() >= 19999.0;
+        const juce::String expected = off ? juce::String()
+            : slider.getValue() >= 999.95 ? juce::String("kHz") : juce::String("Hz");
         if (label.getText() != expected)
         {
             label.setText(expected, juce::dontSendNotification);
@@ -1250,8 +1257,8 @@ void AeroGateAudioProcessorEditor::refreshUnitLabels()
         }
     };
 
-    refresh(hpfSlider, hpfUnit);
-    refresh(lpfSlider, lpfUnit);
+    refresh(hpfSlider, hpfUnit, true);
+    refresh(lpfSlider, lpfUnit, false);
 }
 
 void AeroGateAudioProcessorEditor::setupSmallButton(juce::TextButton& button)
