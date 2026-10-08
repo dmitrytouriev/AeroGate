@@ -587,23 +587,23 @@ void GateEnvelopePreview::paint(juce::Graphics& g)
     handle(x1, x2, idleY, activeY, attackShape, dragging == Segment::attack);
     handle(x3, x4, activeY, idleY, releaseShape, dragging == Segment::release);
 
-    const auto labelY = r.getY() + 3.0f;
-    g.setFont(uiFont(9.5f, juce::Font::bold));
+    // Fixed parameter headings remain legible regardless of interval durations.
+    // Parent editor labels would otherwise be hidden behind this full-panel child.
+    g.setFont(uiFont(11.5f));
     g.setColour(juce::Colour(mutedInk));
+    g.drawText("LOOKAHEAD", { 0, 3, 94, 18 }, juce::Justification::centred);
+    g.drawText("ATTACK", { 98, 3, 92, 18 }, juce::Justification::centred);
+    g.drawText("HOLD", { 196, 3, 92, 18 }, juce::Justification::centred);
+    g.drawText("RELEASE", { 294, 3, 92, 18 }, juce::Justification::centred);
+    g.drawText("DEPTH", { 390, 3, 58, 18 }, juce::Justification::centred);
 
-    auto label = [&](const juce::String& text, float a, float b)
-    {
-        const float width = b - a;
-        // A short interval should not paint clipped text (e.g. "L..." across other sections).
-        if (width >= text.length() * 5.3f)
-            g.drawText(text, juce::Rectangle<float>(a, labelY, width, 16.0f),
-                       juce::Justification::centred, false);
-    };
-
-    label("LOOKAHEAD", x0, x1);
-    label("ATTACK", x1, x2);
-    label("HOLD", x2, x3);
-    label("RELEASE", x3, x4);
+    const float depthReadout = processor.getValueTreeState().getRawParameterValue(
+        AeroGateAudioProcessor::depthParamId)->load();
+    g.setFont(uiFont(12.5f, juce::Font::bold));
+    g.setColour(juce::Colour(ink));
+    g.drawText(depthInf ? juce::String::fromUTF8("−∞")
+                        : juce::String(depthReadout, 1) + " dB",
+               { 390, 98, 58, 21 }, juce::Justification::centred);
 }
 
 void GateEnvelopePreview::mouseDown(const juce::MouseEvent& e)
@@ -692,10 +692,11 @@ void DetectorScope::paint(juce::Graphics& g)
     g.setColour(juce::Colour(lineBlue).withAlpha(0.50f));
     g.drawRoundedRectangle(bounds, 8.0f, 1.0f);
 
+    // Full-panel EQ: labels are painted inside the child, above floating knobs.
     g.setColour(juce::Colour(mutedInk));
-    g.setFont(uiFont(10.0f));
-    g.drawText("DETECTOR EQ", bounds.reduced(8.0f, 2.0f).removeFromTop(13.0f),
-               juce::Justification::centredLeft);
+    g.setFont(uiFont(11.5f));
+    g.drawText("HPF", { 14, 3, 104, 18 }, juce::Justification::centred);
+    g.drawText("LPF", { 134, 3, 104, 18 }, juce::Justification::centred);
 
     auto plot = bounds.reduced(9.0f, 3.0f);
     plot.removeFromTop(15.0f);
@@ -1361,26 +1362,6 @@ void AeroGateAudioProcessorEditor::paint(juce::Graphics& g)
     g.drawText("MODE", rect(536, 418, 100, 28), juce::Justification::centredLeft);
     g.drawText("DETECTOR", rect(730, 418, 150, 28), juce::Justification::centredLeft);
 
-    g.setFont(uiFont(11.5f * s));
-    g.setColour(juce::Colour(mutedInk));
-    g.drawText("LOOKAHEAD", rect(45, 458, 92, 18), juce::Justification::centred);
-    g.drawText("ATTACK", rect(143, 458, 92, 18), juce::Justification::centred);
-    g.drawText("HOLD", rect(241, 458, 92, 18), juce::Justification::centred);
-    g.drawText("RELEASE", rect(339, 458, 92, 18), juce::Justification::centred);
-    g.drawText("DEPTH", rect(438, 458, 58, 18), juce::Justification::centred);
-
-    g.drawText("HPF", rect(742, 458, 104, 18), juce::Justification::centred);
-    g.drawText("LPF", rect(862, 458, 104, 18), juce::Justification::centred);
-
-    const bool depthInf = processor.getValueTreeState().getRawParameterValue(
-        AeroGateAudioProcessor::depthInfParamId)->load() >= 0.5f;
-    const float depth = processor.getValueTreeState().getRawParameterValue(
-        AeroGateAudioProcessor::depthParamId)->load();
-
-    g.setFont(uiFont(14.0f * s, juce::Font::bold));
-    g.setColour(juce::Colour(ink));
-    g.drawText(depthInf ? juce::String::fromUTF8("−∞") : juce::String(depth, 1) + " dB",
-               rect(435, 550, 65, 22), juce::Justification::centred);
 
     g.setFont(uiFont(15.0f * s, juce::Font::bold));
     g.drawText("SIDECHAIN", rect(536, 572, 130, 24), juce::Justification::centredLeft);
@@ -1421,7 +1402,8 @@ void AeroGateAudioProcessorEditor::resized()
     set(releaseUnit, 415, 534, 21, 20);
     set(depthSlider, 445, 478, 50, 72);
     set(depthInfButton, 438, 576, 60, 28);
-    set(gatePreview, 44, 575, 390, 100);
+    // Full-panel envelope: sliders sit visually on top of the curve.
+    set(gatePreview, 44, 455, 448, 220);
 
     set(gateButton, 536, 465, 72, 38);
     set(duckButton, 610, 465, 74, 38);
@@ -1435,7 +1417,8 @@ void AeroGateAudioProcessorEditor::resized()
     set(hpfSlopeBox, 750, 558, 108, 24);
     set(lpfSlopeBox, 870, 558, 108, 24);
     set(audibleButton, 986, 482, 58, 58);
-    set(detectorScope, 728, 589, 328, 85);
+    // Full-panel detector EQ with HPF/LPF knobs floating above it.
+    set(detectorScope, 728, 455, 328, 220);
 
     set(presetBox, 122, 711, 200, 28);
     set(presetPrev, 330, 711, 42, 28);
