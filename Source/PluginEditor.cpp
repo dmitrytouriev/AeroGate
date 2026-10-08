@@ -802,8 +802,9 @@ void DetectorScope::paint(juce::Graphics& g)
         return;
 
     const auto& state = processor.getValueTreeState();
-    const float hpHz = state.getRawParameterValue(AeroGateAudioProcessor::hpfParamId)->load();
     const float lpHz = state.getRawParameterValue(AeroGateAudioProcessor::lpfParamId)->load();
+    const float hpHz = juce::jmin(
+        state.getRawParameterValue(AeroGateAudioProcessor::hpfParamId)->load(), lpHz);
     const int hpSlope = juce::jlimit(0, 5, juce::roundToInt(
         state.getRawParameterValue(AeroGateAudioProcessor::hpfSlopeParamId)->load()));
     const int lpSlope = juce::jlimit(0, 5, juce::roundToInt(
@@ -811,7 +812,8 @@ void DetectorScope::paint(juce::Graphics& g)
     constexpr int orders[] { 2, 3, 4, 6, 8, 16 };
     const bool hpOff = hpHz <= 20.05f;
     const bool lpOff = lpHz >= 19999.0f;
-    const bool empty = !hpOff && !lpOff && hpHz >= lpHz;
+    // At equal cutoffs the two filters meet; do not show an empty band.
+    const bool empty = false;
 
     const auto xForHz = [&](float hz)
     {
@@ -1119,6 +1121,19 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
         state, AeroGateAudioProcessor::hpfParamId, hpfSlider);
     lpfAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         state, AeroGateAudioProcessor::lpfParamId, lpfSlider);
+
+    // A cutoff may meet but never cross the other, whether dragged,
+    // typed into its value box, or updated by the host while the UI is open.
+    hpfSlider.onValueChange = [this]
+    {
+        if (hpfSlider.getValue() > lpfSlider.getValue())
+            hpfSlider.setValue(lpfSlider.getValue(), juce::sendNotificationSync);
+    };
+    lpfSlider.onValueChange = [this]
+    {
+        if (lpfSlider.getValue() < hpfSlider.getValue())
+            lpfSlider.setValue(hpfSlider.getValue(), juce::sendNotificationSync);
+    };
 
     // Independently recallable, host-automatable HPF and LPF slopes.
     const juce::StringArray slopeLabels {
@@ -1468,7 +1483,7 @@ void AeroGateAudioProcessorEditor::paint(juce::Graphics& g)
     g.setFont(uiFont(19.0f * s, juce::Font::bold));
     g.drawText("GATE", rect(45, 418, 100, 28), juce::Justification::centredLeft);
     g.drawText("MODE", rect(536, 418, 100, 28), juce::Justification::centredLeft);
-    g.drawText("DETECTOR", rect(730, 418, 150, 28), juce::Justification::centredLeft);
+    g.drawText("DETECTOR", rect(730, 418, 112, 28), juce::Justification::centredLeft);
 
 
     g.setFont(uiFont(15.0f * s, juce::Font::bold));
@@ -1528,7 +1543,7 @@ void AeroGateAudioProcessorEditor::resized()
     set(hpfSlopeBox, 735, 654, 108, 26);
     set(lpfSlopeBox, 949, 654, 108, 26);
     // Small headphone icon beside the DETECTOR heading.
-    set(audibleButton, 853, 413, 32, 32);
+    set(audibleButton, 837, 417, 29, 29);
     // Full-panel detector EQ with HPF/LPF knobs floating above it.
     set(detectorScope, 728, 455, 328, 220);
 
