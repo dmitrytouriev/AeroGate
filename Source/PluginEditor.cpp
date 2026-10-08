@@ -680,13 +680,8 @@ void GateEnvelopePreview::paint(juce::Graphics& g)
     g.drawText("RELEASE", juce::Rectangle<int>(294, 126, 92, 18), juce::Justification::centred);
     g.drawText("DEPTH", juce::Rectangle<int>(390, 3, 58, 18), juce::Justification::centred);
 
-    const float depthReadout = processor.getValueTreeState().getRawParameterValue(
-        AeroGateAudioProcessor::depthParamId)->load();
-    g.setFont(uiFont(12.5f, juce::Font::bold));
-    g.setColour(juce::Colour(ink));
-    g.drawText(depthInf ? juce::String::fromUTF8("−∞")
-                        : juce::String(depthReadout, 1) + " dB",
-               juce::Rectangle<int>(384, 176, 64, 19), juce::Justification::centred);
+    // Current Depth value is rendered on the slider's moving thumb.
+    // In -inf the thumb is parked in the button directly below the rail.
 }
 
 void GateEnvelopePreview::mouseDown(const juce::MouseEvent& e)
@@ -1078,6 +1073,7 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
 
     lpfSlider.textFromValueFunction = hpfSlider.textFromValueFunction;
 
+    depthSlider.setName("Depth");
     depthSlider.setSliderStyle(juce::Slider::LinearVertical);
     depthSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     depthSlider.setRange(-80.0, 0.0, 0.1);
@@ -1525,8 +1521,8 @@ void AeroGateAudioProcessorEditor::resized()
     set(holdUnit, 317, 654, 21, 20);
     set(releaseUnit, 415, 654, 21, 20);
     // DEPTH spans almost the full block height, unlike the small time knobs.
-    set(depthSlider, 444, 468, 52, 153);
-    set(depthInfButton, 438, 653, 60, 27);
+    set(depthSlider, 436, 477, 61, 147);
+    set(depthInfButton, 437, 626, 60, 31);
     // Full-panel envelope: sliders sit visually on top of the curve.
     set(gatePreview, 44, 455, 448, 220);
 
@@ -1664,7 +1660,8 @@ void AeroGateAudioProcessorEditor::updateDepthState()
 {
     const bool inf = processor.getValueTreeState().getRawParameterValue(
         AeroGateAudioProcessor::depthInfParamId)->load() >= 0.5f;
-    depthSlider.setAlpha(inf ? 0.42f : 1.0f);
+    depthSlider.setInfinity(inf);
+    depthSlider.setAlpha(1.0f);
     depthInfButton.setToggleState(inf, juce::dontSendNotification);
     depthInfButton.setColour(juce::TextButton::buttonColourId,
                              inf ? juce::Colour(accentStrong)
