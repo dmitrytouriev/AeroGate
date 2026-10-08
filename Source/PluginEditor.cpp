@@ -695,7 +695,7 @@ void AeroGateAudioProcessorEditor::PopupOverlay::paint(juce::Graphics& g)
         drawCard(rect(515, 516, 184, 90),
                  "MODE selects Gate or Ducking. SIDECHAIN selects the detector source.");
         drawCard(rect(718, 570, 345, 82),
-                 "HPF and LPF filter the detector. Headphones let you listen to it.");
+                 "HPF/LPF have independent 12-96 dB/oct slopes. Headphones audition the filtered detector.");
         drawCard(rect(404, 656, 292, 51),
                  "Esc or click empty space to close Help.");
         return;
@@ -819,6 +819,27 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
         state, AeroGateAudioProcessor::hpfParamId, hpfSlider);
     lpfAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         state, AeroGateAudioProcessor::lpfParamId, lpfSlider);
+
+    // Independently recallable, host-automatable HPF and LPF slopes.
+    const juce::StringArray slopeLabels {
+        "12 dB/oct", "18 dB/oct", "24 dB/oct",
+        "36 dB/oct", "48 dB/oct", "96 dB/oct"
+    };
+    for (auto* box : { &hpfSlopeBox, &lpfSlopeBox })
+    {
+        for (int i = 0; i < slopeLabels.size(); ++i)
+            box->addItem(slopeLabels[i], i + 1);
+        box->setColour(juce::ComboBox::backgroundColourId, juce::Colours::white.withAlpha(0.64f));
+        box->setColour(juce::ComboBox::outlineColourId,
+                       juce::Colour(lineBlue).withAlpha(0.8f));
+        box->setColour(juce::ComboBox::textColourId, juce::Colour(ink));
+        box->setTooltip("Detector filter steepness");
+        addAndMakeVisible(*box);
+    }
+    hpfSlopeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+        state, AeroGateAudioProcessor::hpfSlopeParamId, hpfSlopeBox);
+    lpfSlopeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
+        state, AeroGateAudioProcessor::lpfSlopeParamId, lpfSlopeBox);
 
     // The editable text is NUMERIC ONLY. Units are separate non-editable labels.
     const auto formatMilliseconds = [](juce::Slider& slider)
@@ -1209,12 +1230,14 @@ void AeroGateAudioProcessorEditor::resized()
     set(internalButton, 536, 615, 74, 38);
     set(externalButton, 612, 615, 72, 38);
 
-    set(hpfSlider, 742, 475, 104, 82);
-    set(lpfSlider, 862, 475, 104, 82);
+    set(hpfSlider, 742, 475, 104, 78);
+    set(lpfSlider, 862, 475, 104, 78);
     set(hpfUnit, 825, 534, 38, 20);
     set(lpfUnit, 945, 534, 38, 20);
+    set(hpfSlopeBox, 750, 558, 108, 24);
+    set(lpfSlopeBox, 870, 558, 108, 24);
     set(audibleButton, 986, 482, 58, 58);
-    set(detectorScope, 728, 575, 328, 100);
+    set(detectorScope, 728, 589, 328, 85);
 
     set(presetBox, 122, 711, 200, 28);
     set(presetPrev, 330, 711, 42, 28);
@@ -1258,6 +1281,8 @@ void AeroGateAudioProcessorEditor::resetDefaults()
     setParameterValue(AeroGateAudioProcessor::depthInfParamId, 0.0f);
     setParameterValue(AeroGateAudioProcessor::hpfParamId, 20.0f);
     setParameterValue(AeroGateAudioProcessor::lpfParamId, 1000.0f);
+    setParameterValue(AeroGateAudioProcessor::hpfSlopeParamId, 2.0f);
+    setParameterValue(AeroGateAudioProcessor::lpfSlopeParamId, 2.0f);
     setParameterValue(AeroGateAudioProcessor::modeParamId, 0.0f);
     setParameterValue(AeroGateAudioProcessor::externalSidechainParamId, 0.0f);
     setParameterValue(AeroGateAudioProcessor::audibleParamId, 0.0f);
