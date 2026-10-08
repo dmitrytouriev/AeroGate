@@ -453,11 +453,20 @@ void GateEnvelopePreview::paint(juce::Graphics& g)
     const float idleY = ducking ? openY : closedY;
     const float activeY = ducking ? closedY : openY;
 
-    g.setColour(juce::Colour(0xff85a8bb).withAlpha(0.14f));
-    g.fillRect(juce::Rectangle<float>(x0, chart.getY(), x1 - x0, chart.getHeight()));
-    g.setColour(juce::Colour(0xff85a8bb).withAlpha(0.32f));
-    for (float x = x0 - chart.getHeight(); x < x1; x += 8.0f)
-        g.drawLine(x, chart.getBottom(), x + chart.getHeight(), chart.getY(), 0.8f);
+    // Lookahead is a separate timeline region; never let its hatching bleed into Attack/Hold.
+    const juce::Rectangle<float> lookaheadArea(x0, chart.getY(),
+                                               juce::jmax(0.0f, x1 - x0), chart.getHeight());
+    if (lookaheadArea.getWidth() > 0.0f)
+    {
+        g.saveState();
+        g.reduceClipRegion(lookaheadArea.getSmallestIntegerContainer());
+        g.setColour(juce::Colour(0xff85a8bb).withAlpha(0.14f));
+        g.fillRect(lookaheadArea);
+        g.setColour(juce::Colour(0xff85a8bb).withAlpha(0.32f));
+        for (float x = x0 - chart.getHeight(); x < x1; x += 8.0f)
+            g.drawLine(x, chart.getBottom(), x + chart.getHeight(), chart.getY(), 0.8f);
+        g.restoreState();
+    }
 
     g.setColour(juce::Colour(lineBlue).withAlpha(0.48f));
     for (float x : { x1, x2, x3, x4 })
@@ -489,10 +498,13 @@ void GateEnvelopePreview::paint(juce::Graphics& g)
     g.setFont(uiFont(9.5f, juce::Font::bold));
     g.setColour(juce::Colour(mutedInk));
 
-    auto label = [&](juce::String text, float a, float b)
+    auto label = [&](const juce::String& text, float a, float b)
     {
-        g.drawText(text, juce::Rectangle<float>(a, labelY, b - a, 16.0f),
-                   juce::Justification::centred);
+        const float width = b - a;
+        // A short interval should not paint clipped text (e.g. "L..." across other sections).
+        if (width >= text.length() * 5.3f)
+            g.drawText(text, juce::Rectangle<float>(a, labelY, width, 16.0f),
+                       juce::Justification::centred, false);
     };
 
     label("LOOKAHEAD", x0, x1);
@@ -788,7 +800,7 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
         slider.setNumDecimalPlacesToDisplay(1);
         slider.textFromValueFunction = [](double value)
         {
-            return value >= 1000.0
+            return value >= 999.95
                 ? juce::String(value / 1000.0, 1)
                 : juce::String(value, 1);
         };
@@ -817,6 +829,13 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
     holdUnit.setText("ms", juce::dontSendNotification);
     releaseUnit.setText("ms", juce::dontSendNotification);
     refreshUnitLabels();
+
+    // SliderAttachment has already populated the text boxes using parameter formatting.
+    // Immediately rebuild those cached initial strings with our numeric-only formatters,
+    // otherwise the previous "5.0 ms" remains visible until the first knob movement.
+    for (auto* slider : { &lookaheadSlider, &attackSlider, &holdSlider, &releaseSlider,
+                          &hpfSlider, &lpfSlider })
+        slider->updateText();
 
     for (auto* button : { &gateButton, &duckButton, &internalButton, &externalButton,
                           &depthInfButton, &resetButton, &helpButton, &bypassButton, &donateButton,
@@ -970,7 +989,7 @@ void AeroGateAudioProcessorEditor::refreshUnitLabels()
 {
     const auto refresh = [](juce::Slider& slider, juce::Label& label)
     {
-        const juce::String expected = slider.getValue() >= 1000.0 ? "kHz" : "Hz";
+        const juce::String expected = slider.getValue() >= 999.95 ? "kHz" : "Hz";
         if (label.getText() != expected)
         {
             label.setText(expected, juce::dontSendNotification);
