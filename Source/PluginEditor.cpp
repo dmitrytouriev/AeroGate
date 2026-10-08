@@ -355,13 +355,19 @@ void SignalFlowComponent::paint(juce::Graphics& g)
                                       innerRadius * 2.0f, 30.0f * s),
                juce::Justification::centred);
 
-    g.setFont(uiFont(13.0f * s, juce::Font::bold));
-    g.setColour(closeEnabled
-                    ? juce::Colour(aerosound::ui::meterOrange)
-                    : juce::Colour(mutedInk).withAlpha(0.52f));
-    g.drawText("CLOSE",
-               juce::Rectangle<float>(centre.x - innerRadius, centre.y + 73.0f * s,
-                                      innerRadius * 2.0f, 20.0f * s),
+    // CLOSE is a real, visibly clickable toggle. Orange = enabled.
+    const auto closeButton = juce::Rectangle<float>(
+        109.0f * s, 27.0f * s)
+        .withCentre({ centre.x, centre.y + 83.0f * s });
+    g.setColour(closeEnabled ? juce::Colour(aerosound::ui::meterOrange)
+                             : juce::Colour(0xffd8e5ed));
+    g.fillRoundedRectangle(closeButton, 8.0f * s);
+    g.setColour(closeEnabled ? juce::Colour(0xffd78225)
+                             : juce::Colour(lineBlue));
+    g.drawRoundedRectangle(closeButton, 8.0f * s, 1.2f * s);
+    g.setFont(uiFont(12.0f * s, juce::Font::bold));
+    g.setColour(closeEnabled ? juce::Colour(0xff33291a) : juce::Colour(mutedInk));
+    g.drawText(closeEnabled ? "CLOSE  ON" : "CLOSE  OFF", closeButton,
                juce::Justification::centred);
 
     g.setFont(uiFont(18.0f * s, juce::Font::bold));
@@ -381,11 +387,8 @@ void SignalFlowComponent::mouseDown(const juce::MouseEvent& e)
     const float radius = juce::jmin(bounds.getHeight() * 0.455f, bounds.getWidth() * 0.145f);
     const float innerRadius = radius * 0.73f;
 
-    const auto closeLabelBounds = juce::Rectangle<float>(
-        centre.x - innerRadius,
-        centre.y + 70.0f * s,
-        innerRadius * 2.0f,
-        27.0f * s);
+    const auto closeLabelBounds = juce::Rectangle<float>(109.0f * s, 27.0f * s)
+        .withCentre({ centre.x, centre.y + 83.0f * s });
 
     if (closeLabelBounds.contains(e.position))
     {
