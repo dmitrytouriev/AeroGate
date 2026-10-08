@@ -88,9 +88,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout AeroGateAudioProcessor::crea
         PID { releaseParamId, 1 }, "Release",
         makeSkewedRange(5.0f, 2000.0f, 180.0f), 120.0f, makeMsAttributes()));
 
+    const juce::StringArray curveChoices { "Fast", "Linear", "Slow" };
+    layout.add(std::make_unique<juce::AudioParameterChoice>(
+        PID { attackCurveParamId, 1 }, "Attack Curve", curveChoices, 1));
+    layout.add(std::make_unique<juce::AudioParameterChoice>(
+        PID { releaseCurveParamId, 1 }, "Release Curve", curveChoices, 0));
+
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         PID { depthParamId, 1 }, "Depth",
-        juce::NormalisableRange<float>(-50.0f, 0.0f, 0.1f), -40.0f, makeDbAttributes()));
+        juce::NormalisableRange<float>(-80.0f, 0.0f, 0.1f), -40.0f, makeDbAttributes()));
 
     layout.add(std::make_unique<juce::AudioParameterBool>(
         PID { depthInfParamId, 1 }, "Depth Infinity", false));
@@ -176,6 +182,9 @@ void AeroGateAudioProcessor::resetDsp()
 
     delayWriteIndex = 0;
     gateEnvelope = 0.0f;
+    envelopeStageStart = 0.0f;
+    envelopeStageProgress = 1.0f;
+    envelopeStageRising = false;
     gateLatched = false;
     holdRemainingSamples = 0;
     scopeCounter = 0;
@@ -357,16 +366,27 @@ float AeroGateAudioProcessor::processGateEnvelope(float detectorDb,
         }
     }
 
-    if (gateLatched)
+    // A ramp always spans its full Attack/Release duration in samples.
+    // On retrigger, start from the CURRENT gain so mode changes are click-free.
+    if (gateLatched != envelopeStageRising)
     {
-        const float attackSamples = juce::jmax(1.0f, static_cast<float>(currentSampleRate * 0.001 * attackMs));
-        gateEnvelope = juce::jmin(1.0f, gateEnvelope + 1.0f / attackSamples);
+        envelopeStageRising = gateLatched;
+        envelopeStageStart = gateEnvelope;
+        envelopeStageProgress = 0.0f;
     }
-    else
-    {
-        const float releaseSamples = juce::jmax(1.0f, static_cast<float>(currentSampleRate * 0.001 * releaseMs));
-        gateEnvelope = juce::jmax(0.0f, gateEnvelope - 1.0f / releaseSamples);
-    }
+
+    const float durationMs = gateLatched ? attackMs : releaseMs;
+    const float durationSamples = juce::jmax(1.0f,
+        static_cast<float>(currentSampleRate * 0.001 * durationMs));
+    envelopeStageProgress = juce::jmin(1.0f,
+        envelopeStageProgress + 1.0f / durationSamples);
+
+    const auto* curveParam = parameters.getRawParameterValue(
+        gateLatched ? attackCurveParamId : releaseCurveParamId);
+    const int shape = juce::jlimit(0, 2, juce::roundToInt(curveParam->load()));
+    const float step = aerogate::envelope::easedProgress(envelopeStageProgress, shape);
+    const float target = gateLatched ? 1.0f : 0.0f;
+    gateEnvelope = envelopeStageStart + (target - envelopeStageStart) * step;
 
     return gateEnvelope;
 }
