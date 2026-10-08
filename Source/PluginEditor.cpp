@@ -72,36 +72,24 @@ juce::Point<float> SignalFlowComponent::arcPoint(float radius, float clockDegree
              centre.y - radius * std::cos(radians) };
 }
 
+// The half-wave and both coloured threshold lines use the same -70..0 dB scale.
+// The circle sweeps nearly the full usable waveform height rather than only its top.
 float SignalFlowComponent::thresholdAngle(float db) const noexcept
 {
     const auto bounds = getLocalBounds().toFloat();
-    const float s = juce::jmax(0.6f, bounds.getHeight() / 300.0f);
     const auto centre = bounds.getCentre();
     const float radius = juce::jmin(bounds.getHeight() * 0.455f, bounds.getWidth() * 0.145f);
-    const float waveHeight = bounds.getHeight() - 84.0f * s;
-    const float waveMidY = bounds.getY() + 54.0f * s + waveHeight * 0.5f;
-    const float waveHalf = waveHeight * 0.43f;
-
-    const float gain = juce::Decibels::decibelsToGain(db);
-    const float targetY = waveMidY - std::sqrt(juce::jlimit(0.0f, 1.0f, gain)) * waveHalf;
+    const float topY = centre.y - radius * std::cos(juce::degreesToRadians(30.0f));
+    const float bottomY = centre.y - radius * std::cos(juce::degreesToRadians(150.0f));
+    const float norm = juce::jlimit(0.0f, 1.0f, -db / 70.0f);
+    const float targetY = topY + norm * (bottomY - topY);
     const float cosine = juce::jlimit(-1.0f, 1.0f, (centre.y - targetY) / radius);
     return juce::radiansToDegrees(std::acos(cosine));
 }
 
 float SignalFlowComponent::closeAngle(float db) const noexcept
 {
-    const auto bounds = getLocalBounds().toFloat();
-    const float s = juce::jmax(0.6f, bounds.getHeight() / 300.0f);
-    const auto centre = bounds.getCentre();
-    const float radius = juce::jmin(bounds.getHeight() * 0.455f, bounds.getWidth() * 0.145f);
-    const float waveHeight = bounds.getHeight() - 84.0f * s;
-    const float waveMidY = bounds.getY() + 54.0f * s + waveHeight * 0.5f;
-    const float waveHalf = waveHeight * 0.43f;
-
-    const float gain = juce::Decibels::decibelsToGain(db);
-    const float targetY = waveMidY - std::sqrt(juce::jlimit(0.0f, 1.0f, gain)) * waveHalf;
-    const float cosine = juce::jlimit(-1.0f, 1.0f, (centre.y - targetY) / radius);
-    return 360.0f - juce::radiansToDegrees(std::acos(cosine));
+    return 360.0f - thresholdAngle(db);
 }
 
 void SignalFlowComponent::drawArc(juce::Graphics& g, float radius, float fromDeg, float toDeg,
@@ -133,28 +121,28 @@ void SignalFlowComponent::drawWaveform(juce::Graphics& g, juce::Rectangle<float>
     if (history.size() < 2 || area.isEmpty())
         return;
 
-    const float mid = area.getCentreY();
-    const float half = area.getHeight() * 0.43f;
+    // Render only the upper half. Level is shown on the same dB axis as
+    // Threshold/Close, so crossing their horizontal lines is meaningful.
+    const float baseline = area.getBottom();
+    const float height = area.getHeight();
     const int count = static_cast<int>(history.size());
 
-    auto sampleAt = [&](int i)
+    const auto levelAt = [&](int index)
     {
-        const int index = newestAtRight ? i : (count - 1 - i);
-        return juce::jlimit(0.0f, 1.0f, history[static_cast<size_t>(index)]);
+        const int i = newestAtRight ? index : (count - 1 - index);
+        const float amplitude = juce::jmax(1.0e-7f, history[static_cast<size_t>(i)]);
+        const float db = juce::Decibels::gainToDecibels(amplitude, -70.0f);
+        return juce::jlimit(0.0f, 1.0f, (db + 70.0f) / 70.0f);
     };
-
-    g.setColour(juce::Colour(lineBlue).withAlpha(0.28f));
-    g.drawHorizontalLine(juce::roundToInt(mid), area.getX(), area.getRight());
 
     juce::Path top;
     juce::Path fill;
+
     for (int i = 0; i < count; ++i)
     {
         const float x = area.getX() + area.getWidth() * static_cast<float>(i)
-                                      / static_cast<float>(count - 1);
-        const float amp = std::sqrt(sampleAt(i)) * half;
-        const float y = mid - amp;
-
+                                       / static_cast<float>(count - 1);
+        const float y = baseline - levelAt(i) * height;
         if (i == 0)
             top.startNewSubPath(x, y);
         else
@@ -162,26 +150,80 @@ void SignalFlowComponent::drawWaveform(juce::Graphics& g, juce::Rectangle<float>
     }
 
     fill = top;
-    for (int i = count - 1; i >= 0; --i)
-    {
-        const float x = area.getX() + area.getWidth() * static_cast<float>(i)
-                                      / static_cast<float>(count - 1);
-        const float amp = std::sqrt(sampleAt(i)) * half;
-        fill.lineTo(x, mid + amp);
-    }
+    fill.lineTo(area.getRight(), baseline);
+    fill.lineTo(area.getX(), baseline);
     fill.closeSubPath();
 
-    juce::ColourGradient grad(juce::Colour(0xff38b8ee).withAlpha(0.54f),
-                              area.getX(), mid,
-                              juce::Colour(0xff168dcc).withAlpha(0.20f),
-                              area.getRight(), mid, false);
-    g.setGradientFill(grad);
+    juce::ColourGradient gradient(juce::Colour(0xff3ebbec).withAlpha(0.62f),
+                                  area.getX(), area.getY(),
+                                  juce::Colour(0xff1593d1).withAlpha(0.23f),
+                                  area.getX(), baseline, false);
+    g.setGradientFill(gradient);
     g.fillPath(fill);
 
-    g.setColour(juce::Colour(0xff149ee3).withAlpha(0.92f));
-    g.strokePath(top, juce::PathStrokeType(1.0f,
-                                           juce::PathStrokeType::curved,
-                                           juce::PathStrokeType::rounded));
+    g.setColour(juce::Colour(0xff168fcd).withAlpha(0.94f));
+    g.strokePath(top, juce::PathStrokeType(1.2f,
+                    juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
+}
+
+// A pale reflected half continues under the frosted lower controls.
+// This is the SAME history as above, not a random or synthesized wave.
+void SignalFlowComponent::paintWaveReflection(juce::Graphics& g,
+                                              juce::Point<int> editorOrigin) const
+{
+    const auto bounds = getLocalBounds().toFloat();
+    const float s = juce::jmax(0.6f, bounds.getHeight() / 300.0f);
+    const auto centre = bounds.getCentre();
+    const float radius = juce::jmin(bounds.getHeight() * 0.455f, bounds.getWidth() * 0.145f);
+    const float topY = centre.y - radius * std::cos(juce::degreesToRadians(30.0f));
+    const float bottomY = centre.y - radius * std::cos(juce::degreesToRadians(150.0f));
+    const float halfWidthLeft = juce::jmax(20.0f, centre.x - radius * 1.12f
+                                          - bounds.getX() - 34.0f * s);
+    const float halfWidthRight = juce::jmax(20.0f, bounds.getRight()
+                                           - (centre.x + radius * 1.12f) - 24.0f * s);
+    const auto left = juce::Rectangle<float>(editorOrigin.x + bounds.getX() + 24.0f * s,
+                                               editorOrigin.y + topY, halfWidthLeft, bottomY - topY);
+    const auto right = juce::Rectangle<float>(editorOrigin.x + centre.x + radius * 1.12f,
+                                                editorOrigin.y + topY, halfWidthRight, bottomY - topY);
+
+    const auto reflected = [&](const juce::Rectangle<float>& area, const std::deque<float>& history)
+    {
+        if (history.size() < 2)
+            return;
+
+        juce::Path reflectedTop;
+        const int count = static_cast<int>(history.size());
+        for (int i = 0; i < count; ++i)
+        {
+            const float amplitude = juce::jmax(1.0e-7f, history[static_cast<size_t>(i)]);
+            const float db = juce::Decibels::gainToDecibels(amplitude, -70.0f);
+            const float norm = juce::jlimit(0.0f, 1.0f, (db + 70.0f) / 70.0f);
+            const float x = area.getX() + area.getWidth() * static_cast<float>(i)
+                                           / static_cast<float>(count - 1);
+            const float y = area.getBottom() + area.getHeight() * norm;
+            if (i == 0)
+                reflectedTop.startNewSubPath(x, y);
+            else
+                reflectedTop.lineTo(x, y);
+        }
+        juce::Path fill = reflectedTop;
+        fill.lineTo(area.getRight(), area.getBottom());
+        fill.lineTo(area.getX(), area.getBottom());
+        fill.closeSubPath();
+
+        g.setColour(juce::Colour(0xff6ac4ea).withAlpha(0.10f));
+        g.fillPath(fill);
+        g.setColour(juce::Colour(0xff309ccf).withAlpha(0.12f));
+        g.strokePath(reflectedTop, juce::PathStrokeType(1.0f));
+    };
+
+    g.saveState();
+    const int clipY = editorOrigin.y + getHeight();
+    g.reduceClipRegion(juce::Rectangle<int>(0, clipY, g.getClipBounds().getRight(),
+                                            juce::jmax(0, g.getClipBounds().getBottom() - clipY)));
+    reflected(left, outputHistory);
+    reflected(right, inputHistory);
+    g.restoreState();
 }
 
 void SignalFlowComponent::paint(juce::Graphics& g)
@@ -198,17 +240,16 @@ void SignalFlowComponent::paint(juce::Graphics& g)
     const float radius = juce::jmin(bounds.getHeight() * 0.455f, bounds.getWidth() * 0.145f);
     const float innerRadius = radius * 0.73f;
 
+    const float topY = centre.y - radius * std::cos(juce::degreesToRadians(30.0f));
+    const float bottomY = centre.y - radius * std::cos(juce::degreesToRadians(150.0f));
     const auto leftArea = juce::Rectangle<float>(
-        bounds.getX() + 24.0f * s,
-        bounds.getY() + 54.0f * s,
+        bounds.getX() + 24.0f * s, topY,
         juce::jmax(20.0f, centre.x - radius * 1.12f - bounds.getX() - 34.0f * s),
-        bounds.getHeight() - 84.0f * s);
-
+        bottomY - topY);
     const auto rightArea = juce::Rectangle<float>(
-        centre.x + radius * 1.12f,
-        bounds.getY() + 54.0f * s,
+        centre.x + radius * 1.12f, topY,
         juce::jmax(20.0f, bounds.getRight() - (centre.x + radius * 1.12f) - 24.0f * s),
-        bounds.getHeight() - 84.0f * s);
+        bottomY - topY);
 
     drawWaveform(g, leftArea, outputHistory, true);
     drawWaveform(g, rightArea, inputHistory, true);
@@ -1080,6 +1121,9 @@ void AeroGateAudioProcessorEditor::paint(juce::Graphics& g)
     drawPanel(g, rect(520, 405, 180, 285));
     drawPanel(g, rect(712, 405, 360, 285));
     drawPanel(g, rect(28, 704, 1044, 42));
+
+    // Reflected halfwave is lightly visible underneath lower glass panels.
+    signalFlow.paintWaveReflection(g, signalFlow.getPosition());
 
     juce::AttributedString title;
     title.setJustification(juce::Justification::centred);
