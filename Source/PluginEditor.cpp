@@ -86,6 +86,10 @@ SignalFlowComponent::SignalFlowComponent(AeroGateAudioProcessor& p)
     closeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         processor.getValueTreeState(), AeroGateAudioProcessor::closeParamId, closeValue);
 
+    const double difference = thresholdValue.getValue() - closeValue.getValue();
+    if (difference >= 0.5)
+        lastUsableCloseGap = difference;
+
     setMouseCursor(juce::MouseCursor::PointingHandCursor);
 }
 
@@ -304,14 +308,16 @@ void SignalFlowComponent::paint(juce::Graphics& g)
     g.drawDashedLine(thresholdLeft, dashPattern, 2, 1.5f * s);
     g.drawDashedLine(thresholdRight, dashPattern, 2, 1.5f * s);
 
-    g.setColour((closeEnabled ? juce::Colour(aerosound::ui::meterOrange)
-                              : juce::Colour(accentStrong)).withAlpha(0.98f));
+    if (closeEnabled)
+    {
+    g.setColour(juce::Colour(aerosound::ui::meterOrange).withAlpha(0.98f));
     juce::Line<float> closeLeft(bounds.getX() + 2.0f * s, closeHandle.y,
                                 centre.x - radius * 0.97f, closeHandle.y);
     juce::Line<float> closeRight(centre.x + radius * 0.97f, closeHandle.y,
                                  bounds.getRight() - 2.0f * s, closeHandle.y);
     g.drawDashedLine(closeLeft, dashPattern, 2, 1.5f * s);
     g.drawDashedLine(closeRight, dashPattern, 2, 1.5f * s);
+    }
 
     g.setColour(juce::Colours::white.withAlpha(0.95f));
     g.fillEllipse(centre.x - innerRadius, centre.y - innerRadius,
@@ -324,9 +330,9 @@ void SignalFlowComponent::paint(juce::Graphics& g)
     drawArc(g, radius, 150.0f, thresholdAngle(threshold), juce::Colour(accentStrong), 13.0f * s);
 
     drawArc(g, radius, 210.0f, 330.0f, juce::Colour(0xff91b4c7).withAlpha(0.34f), 13.0f * s);
-    drawArc(g, radius, 210.0f, closeAngle(close),
-            closeEnabled ? juce::Colour(aerosound::ui::meterOrange)
-                         : juce::Colour(accentStrong), 13.0f * s);
+    if (closeEnabled)
+        drawArc(g, radius, 210.0f, closeAngle(close),
+                juce::Colour(aerosound::ui::meterOrange), 13.0f * s);
 
     auto drawHandle = [&](juce::Point<float> pt, juce::Colour c)
     {
@@ -338,8 +344,8 @@ void SignalFlowComponent::paint(juce::Graphics& g)
     };
 
     drawHandle(thresholdHandle, juce::Colour(accentStrong));
-    drawHandle(closeHandle, closeEnabled ? juce::Colour(aerosound::ui::meterOrange)
-                                          : juce::Colour(accentStrong));
+    if (closeEnabled)
+        drawHandle(closeHandle, juce::Colour(aerosound::ui::meterOrange));
 
     const auto logoArea = juce::Rectangle<float>(innerRadius * 1.15f, innerRadius * 0.48f)
                               .withCentre({ centre.x, centre.y - innerRadius * 0.32f });
@@ -366,9 +372,9 @@ void SignalFlowComponent::paint(juce::Graphics& g)
     g.setColour(closeEnabled ? juce::Colours::white.withAlpha(0.54f)
                              : juce::Colour(0xffbecbd4).withAlpha(0.48f));
     g.fillRoundedRectangle(closeButton, 7.0f * s);
-    g.setColour(closeEnabled ? juce::Colours::white
+    g.setColour(closeEnabled ? juce::Colour(0xff90c9ea)
                              : juce::Colour(0xffa3afb9));
-    g.drawRoundedRectangle(closeButton, 7.0f * s, 1.7f * s);
+    g.drawRoundedRectangle(closeButton, 7.0f * s, 2.0f * s);
     g.setFont(uiFont(12.5f * s, juce::Font::bold));
     g.setColour(closeEnabled ? juce::Colour(ink)
                              : juce::Colour(mutedInk).withAlpha(0.56f));
@@ -383,31 +389,71 @@ void SignalFlowComponent::paint(juce::Graphics& g)
                juce::Justification::centred);
 }
 
+void SignalFlowComponent::setCloseEnabled(bool enabled)
+{
+    auto& state = processor.getValueTreeState();
+    const bool currentlyEnabled = state.getRawParameterValue(
+        AeroGateAudioProcessor::closeEnabledParamId)->load() >= 0.5f;
+
+    if (currentlyEnabled == enabled)
+        return;
+
+    if (currentlyEnabled)
+    {
+        const double gap = thresholdValue.getValue() - closeValue.getValue();
+        if (gap >= 0.5)
+            lastUsableCloseGap = gap;
+    }
+    else if (enabled)
+    {
+        // Recover the previously audible hysteresis, never reactivate at equality.
+        const double threshold = thresholdValue.getValue();
+        const double desiredClose = juce::jlimit(-70.0, threshold - 0.1,
+                                                 threshold - lastUsableCloseGap);
+        closeValue.setValue(desiredClose, juce::sendNotificationSync);
+    }
+
+    if (auto* param = state.getParameter(AeroGateAudioProcessor::closeEnabledParamId))
+    {
+        param->beginChangeGesture();
+        param->setValueNotifyingHost(enabled ? 1.0f : 0.0f);
+        param->endChangeGesture();
+    }
+    repaint();
+}
+
+void SignalFlowComponent::syncCloseState()
+{
+    const auto& state = processor.getValueTreeState();
+    const bool enabled = state.getRawParameterValue(
+        AeroGateAudioProcessor::closeEnabledParamId)->load() >= 0.5f;
+    const double threshold = thresholdValue.getValue();
+    const double close = closeValue.getValue();
+
+    // Host automation or typed values may also make CLOSE meet THRESHOLD.
+    if (enabled && close >= threshold - 0.05)
+    {
+        setCloseEnabled(false);
+        closeValue.setValue(juce::jmax(-70.0, threshold - lastUsableCloseGap),
+                            juce::sendNotificationSync);
+    }
+}
+
 void SignalFlowComponent::mouseDown(const juce::MouseEvent& e)
 {
     const auto bounds = getLocalBounds().toFloat();
     const float s = juce::jmax(0.6f, bounds.getHeight() / 300.0f);
     const auto centre = bounds.getCentre();
-    const float radius = juce::jmin(bounds.getHeight() * 0.455f, bounds.getWidth() * 0.145f);
-    const float innerRadius = radius * 0.73f;
 
-    const auto closeLabelBounds = juce::Rectangle<float>(109.0f * s, 27.0f * s)
+    const auto closeButton = juce::Rectangle<float>(109.0f * s, 27.0f * s)
         .withCentre({ centre.x, centre.y + 83.0f * s });
 
-    if (closeLabelBounds.contains(e.position))
+    if (closeButton.contains(e.position))
     {
-        if (auto* parameter = processor.getValueTreeState().getParameter(
-                AeroGateAudioProcessor::closeEnabledParamId))
-        {
-            const bool enabled = processor.getValueTreeState().getRawParameterValue(
-                AeroGateAudioProcessor::closeEnabledParamId)->load() >= 0.5f;
-            parameter->beginChangeGesture();
-            parameter->setValueNotifyingHost(enabled ? 0.0f : 1.0f);
-            parameter->endChangeGesture();
-        }
-
+        const bool enabled = processor.getValueTreeState().getRawParameterValue(
+            AeroGateAudioProcessor::closeEnabledParamId)->load() >= 0.5f;
+        setCloseEnabled(!enabled);
         dragTarget = DragTarget::none;
-        repaint();
         return;
     }
 
@@ -418,24 +464,20 @@ void SignalFlowComponent::mouseDown(const juce::MouseEvent& e)
     {
         dragStartValue = thresholdValue.getValue();
         thresholdCloseGap = juce::jmax(0.0, thresholdValue.getValue() - closeValue.getValue());
+        if (thresholdCloseGap >= 0.5)
+            lastUsableCloseGap = thresholdCloseGap;
     }
     else
     {
         const bool enabled = processor.getValueTreeState().getRawParameterValue(
             AeroGateAudioProcessor::closeEnabledParamId)->load() >= 0.5f;
-
         if (!enabled)
-        {
-            if (auto* parameter = processor.getValueTreeState().getParameter(
-                    AeroGateAudioProcessor::closeEnabledParamId))
-            {
-                parameter->beginChangeGesture();
-                parameter->setValueNotifyingHost(1.0f);
-                parameter->endChangeGesture();
-            }
-        }
+            setCloseEnabled(true);
 
         dragStartValue = closeValue.getValue();
+        thresholdCloseGap = juce::jmax(0.0, thresholdValue.getValue() - dragStartValue);
+        if (thresholdCloseGap >= 0.5)
+            lastUsableCloseGap = thresholdCloseGap;
     }
 }
 
@@ -446,15 +488,52 @@ void SignalFlowComponent::mouseDrag(const juce::MouseEvent& e)
     if (dragTarget == DragTarget::threshold)
     {
         const double newThreshold = juce::jlimit(-60.0, 0.0, dragStartValue + deltaDb);
-        const double newClose = juce::jlimit(-70.0, newThreshold, newThreshold - thresholdCloseGap);
-        thresholdValue.setValue(newThreshold, juce::sendNotificationSync);
-        closeValue.setValue(newClose, juce::sendNotificationSync);
+        const bool enabled = processor.getValueTreeState().getRawParameterValue(
+            AeroGateAudioProcessor::closeEnabledParamId)->load() >= 0.5f;
+
+        // Threshold moves independently toward Close, so reaching it actually
+        // removes the hysteresis instead of dragging Close along forever.
+        if (enabled && newThreshold <= closeValue.getValue() + 0.05)
+        {
+            lastUsableCloseGap = juce::jmax(0.5, thresholdCloseGap);
+            setCloseEnabled(false);
+            thresholdValue.setValue(newThreshold, juce::sendNotificationSync);
+            closeValue.setValue(juce::jmax(-70.0, newThreshold - lastUsableCloseGap),
+                                juce::sendNotificationSync);
+        }
+        else
+        {
+            thresholdValue.setValue(newThreshold, juce::sendNotificationSync);
+            if (!enabled)
+                closeValue.setValue(juce::jmax(-70.0, newThreshold - lastUsableCloseGap),
+                                    juce::sendNotificationSync);
+        }
     }
     else if (dragTarget == DragTarget::close)
     {
         const double threshold = thresholdValue.getValue();
-        closeValue.setValue(juce::jlimit(-70.0, threshold, dragStartValue + deltaDb),
-                            juce::sendNotificationSync);
+        const double candidate = juce::jlimit(-70.0, threshold, dragStartValue + deltaDb);
+        const bool enabled = processor.getValueTreeState().getRawParameterValue(
+            AeroGateAudioProcessor::closeEnabledParamId)->load() >= 0.5f;
+
+        if (candidate >= threshold - 0.05)
+        {
+            if (enabled)
+            {
+                // Preserve the last distinct gap for a later click on CLOSE.
+                lastUsableCloseGap = juce::jmax(0.5, thresholdCloseGap);
+                setCloseEnabled(false);
+                closeValue.setValue(juce::jmax(-70.0, threshold - lastUsableCloseGap),
+                                    juce::sendNotificationSync);
+            }
+        }
+        else if (candidate < threshold - 0.5)
+        {
+            // Dragging back down can immediately reactivate hysteresis.
+            closeValue.setValue(candidate, juce::sendNotificationSync);
+            if (!enabled)
+                setCloseEnabled(true);
+        }
     }
 
     repaint();
