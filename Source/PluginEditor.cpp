@@ -722,32 +722,46 @@ void GateEnvelopePreview::mouseDown(const juce::MouseEvent& e)
             ? AeroGateAudioProcessor::attackCurveParamId
             : AeroGateAudioProcessor::releaseCurveParamId);
         mouseStartY = e.position.y;
+        currentCurveShape = juce::jlimit(0, 2, juce::roundToInt(
+            state.getRawParameterValue(dragging == Segment::attack
+                ? AeroGateAudioProcessor::attackCurveParamId
+                : AeroGateAudioProcessor::releaseCurveParamId)->load()));
     }
 }
 
 void GateEnvelopePreview::mouseDrag(const juce::MouseEvent& e)
 {
     if (dragParameter == nullptr) return;
-    const float dy = e.position.y - mouseStartY;
-    if (!gestureStarted && std::abs(dy) < 10.0f) return;
 
-    // Drag the curve upward/downward to snap among 3 shapes.
-    // The graph flips vertically in Ducking: swap drag direction to
-    // keep the mouse gesture consistent with the visible curve.
+    // Move one state at a time, starting from the CURRENT shape. Each change
+    // needs a fresh 24-pixel drag; changing direction has its own dead zone.
+    constexpr float stepPixels = 24.0f;
+    const float dy = e.position.y - mouseStartY;
+    if (std::abs(dy) < stepPixels) return;
+
     const bool ducking = processor.getValueTreeState().getRawParameterValue(
         AeroGateAudioProcessor::modeParamId)->load() >= 0.5f;
     const bool risingOnGraph = (dragging == Segment::attack) != ducking;
-    int shape = 1; // Linear
-    if (dy <= -10.0f) shape = risingOnGraph ? 0 : 2;
-    if (dy >= 10.0f)  shape = risingOnGraph ? 2 : 0;
+    const int upDirection = risingOnGraph ? -1 : 1; // toward Fast on a rising segment
+    const int newShape = juce::jlimit(0, 2,
+        currentCurveShape + (dy < 0.0f ? upDirection : -upDirection));
 
-    if (!gestureStarted)
+    if (newShape != currentCurveShape)
     {
-        dragParameter->beginChangeGesture();
-        gestureStarted = true;
+        if (!gestureStarted)
+        {
+            dragParameter->beginChangeGesture();
+            gestureStarted = true;
+        }
+
+        currentCurveShape = newShape;
+        dragParameter->setValueNotifyingHost(
+            dragParameter->convertTo0to1(static_cast<float>(currentCurveShape)));
+        repaint();
     }
-    dragParameter->setValueNotifyingHost(dragParameter->convertTo0to1(static_cast<float>(shape)));
-    repaint();
+
+    // Even if we hit an endpoint, a new gesture is needed for another step.
+    mouseStartY = e.position.y;
 }
 
 void GateEnvelopePreview::mouseUp(const juce::MouseEvent&)
@@ -1717,6 +1731,8 @@ void AeroGateAudioProcessorEditor::timerCallback()
         gatePreview.repaint();
         signalFlow.repaint();
     }
+
+    signalFlow.syncCloseState();
 
     // Frequency response changes with both cutoffs and slope automation.
     detectorScope.repaint();
