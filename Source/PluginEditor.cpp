@@ -1539,7 +1539,7 @@ void AeroGateAudioProcessorEditor::resized()
     set(hpfSlopeBox, 735, 654, 108, 26);
     set(lpfSlopeBox, 949, 654, 108, 26);
     // Small headphone icon beside the DETECTOR heading.
-    set(audibleButton, 837, 417, 29, 29);
+    set(audibleButton, 846, 417, 29, 29);
     // Full-panel detector EQ with HPF/LPF knobs floating above it.
     set(detectorScope, 728, 455, 328, 220);
 
