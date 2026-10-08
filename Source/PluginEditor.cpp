@@ -712,7 +712,9 @@ void DetectorScope::paint(juce::Graphics& g)
     const int lpSlope = juce::jlimit(0, 5, juce::roundToInt(
         state.getRawParameterValue(AeroGateAudioProcessor::lpfSlopeParamId)->load()));
     constexpr int orders[] { 2, 3, 4, 6, 8, 16 };
-    const bool empty = hpHz >= lpHz;
+    const bool hpOff = hpHz <= 20.05f;
+    const bool lpOff = lpHz >= 19999.0f;
+    const bool empty = !hpOff && !lpOff && hpHz >= lpHz;
 
     const auto xForHz = [&](float hz)
     {
@@ -743,8 +745,11 @@ void DetectorScope::paint(juce::Graphics& g)
         // The diagram shows the theoretical EQ curve, not an FFT spectrum.
         const float highRatio = hpHz / hz;
         const float lowRatio = hz / lpHz;
-        const double hpPower = std::pow(static_cast<double>(highRatio), 2 * orders[hpSlope]);
-        const double lpPower = std::pow(static_cast<double>(lowRatio), 2 * orders[lpSlope]);
+        // Match the DSP's TRUE bypass states at the extreme cutoff positions.
+        const double hpPower = hpOff ? 0.0 :
+            std::pow(static_cast<double>(highRatio), 2 * orders[hpSlope]);
+        const double lpPower = lpOff ? 0.0 :
+            std::pow(static_cast<double>(lowRatio), 2 * orders[lpSlope]);
         const double attenuation = -10.0 * std::log10(1.0 + hpPower)
                                    -10.0 * std::log10(1.0 + lpPower);
         return juce::jlimit(-72.0f, 0.0f, static_cast<float>(attenuation));
@@ -777,10 +782,16 @@ void DetectorScope::paint(juce::Graphics& g)
                   juce::PathStrokeType::curved, juce::PathStrokeType::rounded));
 
     // Coloured cutoff guides: blue HPF and orange LPF.
-    g.setColour(juce::Colour(accentStrong).withAlpha(0.68f));
-    g.drawVerticalLine(juce::roundToInt(xForHz(hpHz)), plot.getY(), plot.getBottom());
-    g.setColour(juce::Colour(aerosound::ui::meterOrange).withAlpha(0.80f));
-    g.drawVerticalLine(juce::roundToInt(xForHz(lpHz)), plot.getY(), plot.getBottom());
+    if (!hpOff)
+    {
+        g.setColour(juce::Colour(accentStrong).withAlpha(0.68f));
+        g.drawVerticalLine(juce::roundToInt(xForHz(hpHz)), plot.getY(), plot.getBottom());
+    }
+    if (!lpOff)
+    {
+        g.setColour(juce::Colour(aerosound::ui::meterOrange).withAlpha(0.80f));
+        g.drawVerticalLine(juce::roundToInt(xForHz(lpHz)), plot.getY(), plot.getBottom());
+    }
 
     g.setFont(uiFont(9.0f));
     g.setColour(juce::Colour(mutedInk));
