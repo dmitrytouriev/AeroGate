@@ -304,7 +304,8 @@ void SignalFlowComponent::paint(juce::Graphics& g)
     g.drawDashedLine(thresholdLeft, dashPattern, 2, 1.5f * s);
     g.drawDashedLine(thresholdRight, dashPattern, 2, 1.5f * s);
 
-    g.setColour(juce::Colour(aerosound::ui::meterOrange).withAlpha(0.98f));
+    g.setColour((closeEnabled ? juce::Colour(aerosound::ui::meterOrange)
+                              : juce::Colour(accentStrong)).withAlpha(0.98f));
     juce::Line<float> closeLeft(bounds.getX() + 2.0f * s, closeHandle.y,
                                 centre.x - radius * 0.97f, closeHandle.y);
     juce::Line<float> closeRight(centre.x + radius * 0.97f, closeHandle.y,
@@ -323,7 +324,9 @@ void SignalFlowComponent::paint(juce::Graphics& g)
     drawArc(g, radius, 150.0f, thresholdAngle(threshold), juce::Colour(accentStrong), 13.0f * s);
 
     drawArc(g, radius, 210.0f, 330.0f, juce::Colour(0xff91b4c7).withAlpha(0.34f), 13.0f * s);
-    drawArc(g, radius, 210.0f, closeAngle(close), juce::Colour(aerosound::ui::meterOrange), 13.0f * s);
+    drawArc(g, radius, 210.0f, closeAngle(close),
+            closeEnabled ? juce::Colour(aerosound::ui::meterOrange)
+                         : juce::Colour(accentStrong), 13.0f * s);
 
     auto drawHandle = [&](juce::Point<float> pt, juce::Colour c)
     {
@@ -335,7 +338,8 @@ void SignalFlowComponent::paint(juce::Graphics& g)
     };
 
     drawHandle(thresholdHandle, juce::Colour(accentStrong));
-    drawHandle(closeHandle, juce::Colour(aerosound::ui::meterOrange));
+    drawHandle(closeHandle, closeEnabled ? juce::Colour(aerosound::ui::meterOrange)
+                                          : juce::Colour(accentStrong));
 
     const auto logoArea = juce::Rectangle<float>(innerRadius * 1.15f, innerRadius * 0.48f)
                               .withCentre({ centre.x, centre.y - innerRadius * 0.32f });
@@ -355,20 +359,20 @@ void SignalFlowComponent::paint(juce::Graphics& g)
                                       innerRadius * 2.0f, 30.0f * s),
                juce::Justification::centred);
 
-    // CLOSE is a real, visibly clickable toggle. Orange = enabled.
+    // Neutral, familiar button: white outline when active, grey when disabled.
     const auto closeButton = juce::Rectangle<float>(
         109.0f * s, 27.0f * s)
         .withCentre({ centre.x, centre.y + 83.0f * s });
-    g.setColour(closeEnabled ? juce::Colour(aerosound::ui::meterOrange)
-                             : juce::Colour(0xffd8e5ed));
-    g.fillRoundedRectangle(closeButton, 8.0f * s);
-    g.setColour(closeEnabled ? juce::Colour(0xffd78225)
-                             : juce::Colour(lineBlue));
-    g.drawRoundedRectangle(closeButton, 8.0f * s, 1.2f * s);
-    g.setFont(uiFont(12.0f * s, juce::Font::bold));
-    g.setColour(closeEnabled ? juce::Colour(0xff33291a) : juce::Colour(mutedInk));
-    g.drawText(closeEnabled ? "CLOSE  ON" : "CLOSE  OFF", closeButton,
-               juce::Justification::centred);
+    g.setColour(closeEnabled ? juce::Colours::white.withAlpha(0.54f)
+                             : juce::Colour(0xffbecbd4).withAlpha(0.48f));
+    g.fillRoundedRectangle(closeButton, 7.0f * s);
+    g.setColour(closeEnabled ? juce::Colours::white
+                             : juce::Colour(0xffa3afb9));
+    g.drawRoundedRectangle(closeButton, 7.0f * s, 1.7f * s);
+    g.setFont(uiFont(12.5f * s, juce::Font::bold));
+    g.setColour(closeEnabled ? juce::Colour(ink)
+                             : juce::Colour(mutedInk).withAlpha(0.56f));
+    g.drawText("CLOSE", closeButton, juce::Justification::centred);
 
     g.setFont(uiFont(18.0f * s, juce::Font::bold));
     g.setColour(closeEnabled ? juce::Colour(0xff27366d)
