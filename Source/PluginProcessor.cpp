@@ -74,7 +74,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout AeroGateAudioProcessor::crea
 
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         PID { lookaheadParamId, 1 }, "Lookahead",
-        juce::NormalisableRange<float>(0.0f, 20.0f, 0.1f), 5.0f, makeMsAttributes()));
+        juce::NormalisableRange<float>(0.0f, 40.0f, 0.1f), 5.0f, makeMsAttributes()));
 
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         PID { attackParamId, 1 }, "Attack",
@@ -111,9 +111,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout AeroGateAudioProcessor::crea
 
     const juce::StringArray slopes { "12", "18", "24", "36", "48", "96" };
     layout.add(std::make_unique<juce::AudioParameterChoice>(
-        PID { hpfSlopeParamId, 1 }, "HPF Slope", slopes, 2));
+        PID { hpfSlopeParamId, 1 }, "HPF Slope", slopes, 5));
     layout.add(std::make_unique<juce::AudioParameterChoice>(
-        PID { lpfSlopeParamId, 1 }, "LPF Slope", slopes, 2));
+        PID { lpfSlopeParamId, 1 }, "LPF Slope", slopes, 5));
 
     layout.add(std::make_unique<juce::AudioParameterChoice>(
         PID { modeParamId, 1 }, "Mode",
@@ -155,7 +155,7 @@ void AeroGateAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBloc
     cachedHpCutoff = cachedLpCutoff = -1.0f;
     cachedHpSlope = cachedLpSlope = -1;
 
-    maxDelaySamples = juce::jmax(1, juce::roundToInt(sampleRate * 0.020) + samplesPerBlock + 4);
+    maxDelaySamples = juce::jmax(1, juce::roundToInt(sampleRate * 0.040) + samplesPerBlock + 4);
     delayBuffer.setSize(juce::jmax(2, getTotalNumOutputChannels()), maxDelaySamples, false, true, true);
     delayBuffer.clear();
 
@@ -294,6 +294,10 @@ void AeroGateAudioProcessor::updateFilterCutoffs()
 
 float AeroGateAudioProcessor::filterHighPass(float sample, int channel) noexcept
 {
+    // HPF at the minimum (20 Hz) is a true bypass, not a 20 Hz roll-off.
+    if (parameters.getRawParameterValue(hpfParamId)->load() <= 20.05f)
+        return sample;
+
     for (int i = 0; i < hpStageCount; ++i)
         sample = bandHp[static_cast<size_t>(i)].processSample(channel, sample);
 
@@ -308,6 +312,10 @@ float AeroGateAudioProcessor::filterHighPass(float sample, int channel) noexcept
 
 float AeroGateAudioProcessor::filterLowPass(float sample, int channel) noexcept
 {
+    // LPF at the maximum (20 kHz) is a true bypass, including at low sample rates.
+    if (parameters.getRawParameterValue(lpfParamId)->load() >= 19999.0f)
+        return sample;
+
     for (int i = 0; i < lpStageCount; ++i)
         sample = bandLp[static_cast<size_t>(i)].processSample(channel, sample);
 
@@ -454,9 +462,11 @@ void AeroGateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
     // Inverted HPF/LPF limits define an empty detector passband.
     // Keep filters updated but hard-mute the detector so Audition is silent
     // and no spurious low-frequency leakage opens the gate.
-    const bool emptyDetectorBand =
-        parameters.getRawParameterValue(hpfParamId)->load()
-        >= parameters.getRawParameterValue(lpfParamId)->load();
+    const float actualHp = parameters.getRawParameterValue(hpfParamId)->load();
+    const float actualLp = parameters.getRawParameterValue(lpfParamId)->load();
+    const bool hpOff = actualHp <= 20.05f;
+    const bool lpOff = actualLp >= 19999.0f;
+    const bool emptyDetectorBand = !hpOff && !lpOff && actualHp >= actualLp;
 
     const float floorGain = depthInf ? 0.0f : juce::Decibels::decibelsToGain(depthDb);
 
