@@ -16,6 +16,7 @@ public:
     void mouseDrag(const juce::MouseEvent&) override;
     void mouseDoubleClick(const juce::MouseEvent&) override;
     void pushFrame(const AeroGateAudioProcessor::ScopeFrame&);
+    void syncCloseState();
     // Faint reflected half-wave painted behind the lower controls.
     void paintWaveReflection(juce::Graphics&, juce::Point<int> editorOrigin) const;
 
@@ -31,7 +32,6 @@ private:
                       const std::deque<float>&, bool newestAtRight) const;
     void setParameterValue(juce::Slider&, double);
     void setCloseEnabled(bool enabled);
-    void syncCloseState();
 
     AeroGateAudioProcessor& processor;
     juce::Slider thresholdValue;
