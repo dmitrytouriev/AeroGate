@@ -480,7 +480,6 @@ GateEnvelopePreview::GateEnvelopePreview(AeroGateAudioProcessor& p) : processor(
 {
     setInterceptsMouseClicks(true, false);
     setMouseCursor(juce::MouseCursor::UpDownResizeCursor);
-    setTooltip("Drag an ATTACK or RELEASE curve up/down: Fast / Linear / Slow");
 }
 
 void GateEnvelopePreview::paint(juce::Graphics& g)
