@@ -59,6 +59,8 @@ public:
     static constexpr const char* depthInfParamId = "depthInf";
     static constexpr const char* hpfParamId = "hpf";
     static constexpr const char* lpfParamId = "lpf";
+    static constexpr const char* hpfSlopeParamId = "hpfSlope";
+    static constexpr const char* lpfSlopeParamId = "lpfSlope";
     static constexpr const char* modeParamId = "mode";
     static constexpr const char* externalSidechainParamId = "externalSidechain";
     static constexpr const char* audibleParamId = "audible";
@@ -76,8 +78,25 @@ private:
 
     juce::AudioProcessorValueTreeState parameters;
 
-    juce::dsp::StateVariableTPTFilter<float> bandHp;
-    juce::dsp::StateVariableTPTFilter<float> bandLp;
+    // Up to eight 2-pole sections per filter (96 dB/oct).
+    static constexpr int maxFilterStages = 8;
+    std::array<juce::dsp::StateVariableTPTFilter<float>, maxFilterStages> bandHp;
+    std::array<juce::dsp::StateVariableTPTFilter<float>, maxFilterStages> bandLp;
+
+    int hpStageCount = 2;
+    int lpStageCount = 2;
+    bool hpExtraPole = false;
+    bool lpExtraPole = false;
+    float hpOnePoleAlpha = 0.0f;
+    float lpOnePoleAlpha = 0.0f;
+    std::array<float, 2> hpOnePoleState {};
+    std::array<float, 2> lpOnePoleState {};
+    float cachedHpCutoff = -1.0f;
+    float cachedLpCutoff = -1.0f;
+    int cachedHpSlope = -1;
+    int cachedLpSlope = -1;
+    float filterHighPass(float sample, int channel) noexcept;
+    float filterLowPass(float sample, int channel) noexcept;
 
     juce::AudioBuffer<float> delayBuffer;
     int delayWriteIndex = 0;
