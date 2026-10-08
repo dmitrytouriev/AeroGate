@@ -767,30 +767,56 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
     lpfAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
         state, AeroGateAudioProcessor::lpfParamId, lpfSlider);
 
-    const auto forceOneDecimalMs = [](juce::Slider& slider)
+    // The editable text is NUMERIC ONLY. Units are separate non-editable labels.
+    const auto formatMilliseconds = [](juce::Slider& slider)
     {
+        slider.setTextValueSuffix({});
         slider.setNumDecimalPlacesToDisplay(1);
-        slider.textFromValueFunction = [](double value)
+        slider.textFromValueFunction = [](double v) { return juce::String(v, 1); };
+        slider.valueFromTextFunction = [](const juce::String& text)
         {
-            return juce::String(value, 1) + " ms";
+            return text.getDoubleValue();
         };
     };
 
-    forceOneDecimalMs(lookaheadSlider);
-    forceOneDecimalMs(attackSlider);
-    forceOneDecimalMs(holdSlider);
-    forceOneDecimalMs(releaseSlider);
+    for (auto* slider : { &lookaheadSlider, &attackSlider, &holdSlider, &releaseSlider })
+        formatMilliseconds(*slider);
 
-    hpfSlider.setNumDecimalPlacesToDisplay(1);
-    hpfSlider.textFromValueFunction = [](double value)
+    const auto formatFrequency = [](juce::Slider& slider, juce::Label& unit)
     {
-        return value >= 1000.0
-            ? juce::String(value / 1000.0, 1) + " kHz"
-            : juce::String(value, 1) + " Hz";
+        slider.setTextValueSuffix({});
+        slider.setNumDecimalPlacesToDisplay(1);
+        slider.textFromValueFunction = [](double value)
+        {
+            return value >= 1000.0
+                ? juce::String(value / 1000.0, 1)
+                : juce::String(value, 1);
+        };
+        slider.valueFromTextFunction = [&unit](const juce::String& text)
+        {
+            const double scale = unit.getText() == "kHz" ? 1000.0 : 1.0;
+            return text.getDoubleValue() * scale;
+        };
     };
 
-    lpfSlider.setNumDecimalPlacesToDisplay(1);
-    lpfSlider.textFromValueFunction = hpfSlider.textFromValueFunction;
+    formatFrequency(hpfSlider, hpfUnit);
+    formatFrequency(lpfSlider, lpfUnit);
+
+    for (auto* unit : { &lookaheadUnit, &attackUnit, &holdUnit, &releaseUnit,
+                         &hpfUnit, &lpfUnit })
+    {
+        unit->setJustificationType(juce::Justification::centredLeft);
+        unit->setColour(juce::Label::textColourId, juce::Colour(ink));
+        unit->setFont(uiFont(11.5f));
+        unit->setInterceptsMouseClicks(false, false);
+        addAndMakeVisible(*unit);
+    }
+
+    lookaheadUnit.setText("ms", juce::dontSendNotification);
+    attackUnit.setText("ms", juce::dontSendNotification);
+    holdUnit.setText("ms", juce::dontSendNotification);
+    releaseUnit.setText("ms", juce::dontSendNotification);
+    refreshUnitLabels();
 
     for (auto* button : { &gateButton, &duckButton, &internalButton, &externalButton,
                           &depthInfButton, &resetButton, &helpButton, &bypassButton, &donateButton,
@@ -923,20 +949,37 @@ void AeroGateAudioProcessorEditor::setupRotary(juce::Slider& slider,
                                                int decimals)
 {
     slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
-    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 76, 22);
+    slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 60, 22);
     slider.setTextValueSuffix({});
     slider.setNumDecimalPlacesToDisplay(1);
-    slider.textFromValueFunction = [suffix](double value)
-    {
-        return juce::String(value, 1) + suffix;
-    };
-    juce::ignoreUnused(decimals);
+    slider.textFromValueFunction = [](double value) { return juce::String(value, 1); };
+    slider.valueFromTextFunction = [](const juce::String& text) { return text.getDoubleValue(); };
+    juce::ignoreUnused(suffix, decimals);
     slider.setColour(juce::Slider::textBoxTextColourId, juce::Colour(ink));
     slider.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::white.withAlpha(0.34f));
     slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(lineBlue).withAlpha(0.42f));
-    slider.setColour(juce::Slider::textBoxHighlightColourId, juce::Colour(accentStrong).withAlpha(0.25f));
+    slider.setColour(juce::Slider::textBoxHighlightColourId, juce::Colour(0xff166fb0));
+    slider.setColour(juce::TextEditor::highlightColourId, juce::Colour(0xff166fb0));
+    slider.setColour(juce::TextEditor::highlightedTextColourId, juce::Colours::white);
+    slider.setColour(juce::TextEditor::textColourId, juce::Colour(ink));
     slider.setDoubleClickReturnValue(true, slider.getValue());
     slider.setMouseCursor(juce::MouseCursor::PointingHandCursor);
+}
+
+void AeroGateAudioProcessorEditor::refreshUnitLabels()
+{
+    const auto refresh = [](juce::Slider& slider, juce::Label& label)
+    {
+        const juce::String expected = slider.getValue() >= 1000.0 ? "kHz" : "Hz";
+        if (label.getText() != expected)
+        {
+            label.setText(expected, juce::dontSendNotification);
+            slider.updateText();
+        }
+    };
+
+    refresh(hpfSlider, hpfUnit);
+    refresh(lpfSlider, lpfUnit);
 }
 
 void AeroGateAudioProcessorEditor::setupSmallButton(juce::TextButton& button)
@@ -1090,6 +1133,10 @@ void AeroGateAudioProcessorEditor::resized()
     set(attackSlider, 143, 475, 92, 82);
     set(holdSlider, 241, 475, 92, 82);
     set(releaseSlider, 339, 475, 92, 82);
+    set(lookaheadUnit, 121, 534, 21, 20);
+    set(attackUnit, 219, 534, 21, 20);
+    set(holdUnit, 317, 534, 21, 20);
+    set(releaseUnit, 415, 534, 21, 20);
     set(depthSlider, 445, 478, 50, 72);
     set(depthInfButton, 438, 576, 60, 28);
     set(gatePreview, 44, 575, 390, 100);
@@ -1101,6 +1148,8 @@ void AeroGateAudioProcessorEditor::resized()
 
     set(hpfSlider, 742, 475, 104, 82);
     set(lpfSlider, 862, 475, 104, 82);
+    set(hpfUnit, 825, 534, 38, 20);
+    set(lpfUnit, 945, 534, 38, 20);
     set(audibleButton, 986, 482, 58, 58);
     set(detectorScope, 728, 575, 328, 100);
 
@@ -1305,6 +1354,7 @@ void AeroGateAudioProcessorEditor::timerCallback()
         signalFlow.repaint();
     }
 
+    refreshUnitLabels();
     updateButtonStates();
     updateDepthState();
     updateAuditionState();
