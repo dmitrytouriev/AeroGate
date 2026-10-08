@@ -453,7 +453,9 @@ void SignalFlowComponent::pushFrame(const AeroGateAudioProcessor::ScopeFrame& f)
 //==============================================================================
 GateEnvelopePreview::GateEnvelopePreview(AeroGateAudioProcessor& p) : processor(p)
 {
-    setInterceptsMouseClicks(false, false);
+    setInterceptsMouseClicks(true, false);
+    setMouseCursor(juce::MouseCursor::UpDownResizeCursor);
+    setTooltip("Drag an ATTACK or RELEASE curve up/down: Fast / Linear / Slow");
 }
 
 void GateEnvelopePreview::paint(juce::Graphics& g)
@@ -474,6 +476,8 @@ void GateEnvelopePreview::paint(juce::Graphics& g)
     const float depth = processor.getValueTreeState().getRawParameterValue(AeroGateAudioProcessor::depthParamId)->load();
     const bool depthInf = processor.getValueTreeState().getRawParameterValue(AeroGateAudioProcessor::depthInfParamId)->load() >= 0.5f;
     const bool ducking = processor.getValueTreeState().getRawParameterValue(AeroGateAudioProcessor::modeParamId)->load() >= 0.5f;
+    const int attackShape = juce::jlimit(0, 2, juce::roundToInt(processor.getValueTreeState().getRawParameterValue(AeroGateAudioProcessor::attackCurveParamId)->load()));
+    const int releaseShape = juce::jlimit(0, 2, juce::roundToInt(processor.getValueTreeState().getRawParameterValue(AeroGateAudioProcessor::releaseCurveParamId)->load()));
 
     // All four sections use one time scale: equal milliseconds = equal widths.
     const float totalMs = juce::jmax(0.001f, lookahead + attack + hold + release);
@@ -486,7 +490,7 @@ void GateEnvelopePreview::paint(juce::Graphics& g)
 
     const float topY = chart.getY() + 7.0f;
     const float bottomY = chart.getBottom() - 4.0f;
-    const float depthNorm = depthInf ? 0.0f : juce::jlimit(0.0f, 1.0f, (depth + 50.0f) / 50.0f);
+    const float depthNorm = depthInf ? 0.0f : juce::jlimit(0.0f, 1.0f, (depth + 80.0f) / 80.0f);
     const float depthY = bottomY - depthNorm * (bottomY - topY);
     const float openY = topY;
 
@@ -516,13 +520,20 @@ void GateEnvelopePreview::paint(juce::Graphics& g)
     juce::Path env;
     env.startNewSubPath(x0, idleY);
     env.lineTo(x1, idleY);
-    env.cubicTo(x1 + (x2 - x1) * 0.28f, idleY,
-                x1 + (x2 - x1) * 0.72f, activeY,
-                x2, activeY);
+    // Exactly the same easedProgress curve used in the DSP.
+    const auto appendCurve = [&](float left, float right, float from, float to, int shape)
+    {
+        constexpr int slices = 40;
+        for (int i = 1; i <= slices; ++i)
+        {
+            const float t = static_cast<float>(i) / slices;
+            const float eased = aerogate::envelope::easedProgress(t, shape);
+            env.lineTo(left + t * (right - left), from + eased * (to - from));
+        }
+    };
+    appendCurve(x1, x2, idleY, activeY, attackShape);
     env.lineTo(x3, activeY);
-    env.cubicTo(x3 + (x4 - x3) * 0.28f, activeY,
-                x3 + (x4 - x3) * 0.72f, idleY,
-                x4, idleY);
+    appendCurve(x3, x4, activeY, idleY, releaseShape);
 
     juce::Path fill = env;
     fill.lineTo(x4, bottomY);
@@ -534,6 +545,20 @@ void GateEnvelopePreview::paint(juce::Graphics& g)
     g.setColour(juce::Colour(accentStrong));
     g.strokePath(env, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved,
                                            juce::PathStrokeType::rounded));
+
+    // Small white grab points help discover direct manipulation.
+    const auto handle = [&](float xA, float xB, float yA, float yB, int shape, bool draggingThis)
+    {
+        if (xB - xA < 7.0f) return;
+        const float x = (xA + xB) * 0.5f;
+        const float y = yA + aerogate::envelope::easedProgress(0.5f, shape) * (yB - yA);
+        g.setColour(juce::Colours::white.withAlpha(0.98f));
+        g.fillEllipse(x - 4.0f, y - 4.0f, 8.0f, 8.0f);
+        g.setColour(juce::Colour(draggingThis ? accentDark : accentStrong));
+        g.drawEllipse(x - 4.0f, y - 4.0f, 8.0f, 8.0f, 1.5f);
+    };
+    handle(x1, x2, idleY, activeY, attackShape, dragging == Segment::attack);
+    handle(x3, x4, activeY, idleY, releaseShape, dragging == Segment::release);
 
     const auto labelY = r.getY() + 3.0f;
     g.setFont(uiFont(9.5f, juce::Font::bold));
@@ -552,6 +577,73 @@ void GateEnvelopePreview::paint(juce::Graphics& g)
     label("ATTACK", x1, x2);
     label("HOLD", x2, x3);
     label("RELEASE", x3, x4);
+}
+
+void GateEnvelopePreview::mouseDown(const juce::MouseEvent& e)
+{
+    dragging = Segment::none;
+    dragParameter = nullptr;
+    gestureStarted = false;
+    auto chart = getLocalBounds().toFloat().reduced(2.0f).reduced(12.0f, 10.0f);
+    chart.removeFromTop(17.0f);
+    if (!chart.contains(e.position)) return;
+
+    const auto& state = processor.getValueTreeState();
+    const float ahead = state.getRawParameterValue(AeroGateAudioProcessor::lookaheadParamId)->load();
+    const float attack = state.getRawParameterValue(AeroGateAudioProcessor::attackParamId)->load();
+    const float hold = state.getRawParameterValue(AeroGateAudioProcessor::holdParamId)->load();
+    const float release = state.getRawParameterValue(AeroGateAudioProcessor::releaseParamId)->load();
+    const float scale = chart.getWidth() / juce::jmax(0.001f, ahead + attack + hold + release);
+    const float a = chart.getX() + ahead * scale;
+    const float b = a + attack * scale;
+    const float c = b + hold * scale;
+    const float d = chart.getRight();
+    const bool nearAttack = e.position.x >= a - 6.0f && e.position.x <= b + 6.0f;
+    const bool nearRelease = e.position.x >= c - 6.0f && e.position.x <= d + 6.0f;
+    if (nearAttack && (!nearRelease
+        || std::abs(e.position.x - (a + b) * 0.5f) < std::abs(e.position.x - (c + d) * 0.5f)))
+        dragging = Segment::attack;
+    else if (nearRelease)
+        dragging = Segment::release;
+
+    if (dragging != Segment::none)
+    {
+        dragParameter = state.getParameter(dragging == Segment::attack
+            ? AeroGateAudioProcessor::attackCurveParamId
+            : AeroGateAudioProcessor::releaseCurveParamId);
+        mouseStartY = e.position.y;
+    }
+}
+
+void GateEnvelopePreview::mouseDrag(const juce::MouseEvent& e)
+{
+    if (dragParameter == nullptr) return;
+    const float dy = e.position.y - mouseStartY;
+    if (!gestureStarted && std::abs(dy) < 10.0f) return;
+
+    // Drag the curve upward/downward to snap among 3 shapes.
+    // On falling Release, the corresponding fast/slow directions reverse.
+    int shape = 1; // Linear
+    if (dy <= -10.0f) shape = (dragging == Segment::attack ? 0 : 2);
+    if (dy >= 10.0f)  shape = (dragging == Segment::attack ? 2 : 0);
+
+    if (!gestureStarted)
+    {
+        dragParameter->beginChangeGesture();
+        gestureStarted = true;
+    }
+    dragParameter->setValueNotifyingHost(dragParameter->convertTo0to1(static_cast<float>(shape)));
+    repaint();
+}
+
+void GateEnvelopePreview::mouseUp(const juce::MouseEvent&)
+{
+    if (gestureStarted && dragParameter != nullptr)
+        dragParameter->endChangeGesture();
+    gestureStarted = false;
+    dragParameter = nullptr;
+    dragging = Segment::none;
+    repaint();
 }
 
 //==============================================================================
