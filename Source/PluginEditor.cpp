@@ -47,6 +47,31 @@ float softWave(float x) noexcept
     return 0.5f + 0.5f * std::sin(x);
 }
 
+// Starting points for different sources. Each uses the same APVTS parameters
+// as the editor and DSP, so automation and project recall work normally.
+struct AeroGatePreset
+{
+    const char* name;
+    float threshold, close, lookahead, attack, hold, release, depth, hpf, lpf;
+    int attackCurve, releaseCurve;
+    bool ducking;
+};
+
+constexpr std::array<AeroGatePreset, 12> aeroGatePresets {{
+    { "Kick Tight",     -24, -30, 5, 0.7f,  45,  90, -70,  30, 1800, 1, 0, false },
+    { "Kick Natural",   -27, -33, 5, 2.0f,  70, 190, -35,  25, 2500, 1, 1, false },
+    { "Snare Tight",    -23, -29, 4, 0.6f,  60, 110, -60, 130, 8500, 0, 0, false },
+    { "Snare Natural",  -28, -34, 5, 1.5f,  90, 260, -35,  90, 9500, 1, 1, false },
+    { "Tom Tight",      -28, -34, 5, 1.5f,  85, 170, -65,  50, 4200, 0, 0, false },
+    { "Tom Natural",    -30, -36, 5, 2.5f, 120, 320, -30,  35, 1800, 1, 2, false },
+    { "Hi-Hat Cleanup",-29, -35, 2, 1.0f,  30,  70, -55, 500,14000, 1, 0, false },
+    { "Voice Clean",    -32, -38, 5, 4.0f, 130, 230, -28,  85,11500, 1, 2, false },
+    { "Voice Gentle",   -39, -45, 5, 9.0f, 220, 420, -16,  80,14000, 2, 2, false },
+    { "Guitar Chops",   -30, -36, 3, 1.0f,  35, 100, -65,  95, 8000, 1, 0, false },
+    { "Bass Tight",     -26, -32, 5, 2.0f,  95, 220, -50,  20, 1000, 1, 0, false },
+    { "Music Ducking",  -28, -34, 5, 6.0f,  50, 280, -16, 120,10000, 1, 2, true  }
+}};
+
 }
 
 //==============================================================================
@@ -938,7 +963,7 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
 
     depthSlider.setSliderStyle(juce::Slider::LinearVertical);
     depthSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
-    depthSlider.setRange(-50.0, 0.0, 0.1);
+    depthSlider.setRange(-80.0, 0.0, 0.1);
     depthSlider.setSliderSnapsToMousePosition(false);
     depthSlider.onClickWithoutDrag = [this]
     {
@@ -1083,10 +1108,10 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
 
 
     presetBox.addItem("Default", 1);
-    presetBox.addItem("Kick Tight", 2);
-    presetBox.addItem("Tom Natural", 3);
-    presetBox.addItem("Ducking", 4);
-    presetBox.setSelectedId(2, juce::dontSendNotification);
+    for (size_t i = 0; i < aeroGatePresets.size(); ++i)
+        presetBox.addItem(aeroGatePresets[i].name, static_cast<int>(i) + 2);
+    // Do not imply a preset was applied when a new instance is opened.
+    presetBox.setSelectedId(1, juce::dontSendNotification);
     presetBox.onChange = [this]
     {
         applyPreset(presetBox.getSelectedItemIndex());
@@ -1428,6 +1453,8 @@ void AeroGateAudioProcessorEditor::resetDefaults()
     setParameterValue(AeroGateAudioProcessor::attackParamId, 2.0f);
     setParameterValue(AeroGateAudioProcessor::holdParamId, 50.0f);
     setParameterValue(AeroGateAudioProcessor::releaseParamId, 120.0f);
+    setParameterValue(AeroGateAudioProcessor::attackCurveParamId, 1.0f); // Linear
+    setParameterValue(AeroGateAudioProcessor::releaseCurveParamId, 0.0f); // Fast
     setParameterValue(AeroGateAudioProcessor::depthParamId, -40.0f);
     setParameterValue(AeroGateAudioProcessor::depthInfParamId, 0.0f);
     setParameterValue(AeroGateAudioProcessor::hpfParamId, 20.0f);
@@ -1437,6 +1464,8 @@ void AeroGateAudioProcessorEditor::resetDefaults()
     setParameterValue(AeroGateAudioProcessor::modeParamId, 0.0f);
     setParameterValue(AeroGateAudioProcessor::externalSidechainParamId, 0.0f);
     setParameterValue(AeroGateAudioProcessor::audibleParamId, 0.0f);
+    if (presetBox.getNumItems() > 0)
+        presetBox.setSelectedId(1, juce::dontSendNotification);
     updateButtonStates();
     updateDepthState();
     updateAuditionState();
@@ -1445,33 +1474,27 @@ void AeroGateAudioProcessorEditor::resetDefaults()
 void AeroGateAudioProcessorEditor::applyPreset(int index)
 {
     resetDefaults();
+    if (index <= 0 || index > static_cast<int>(aeroGatePresets.size()))
+        return;
 
-    if (index == 1) // Kick Tight
-    {
-        setParameterValue(AeroGateAudioProcessor::attackParamId, 1.0f);
-        setParameterValue(AeroGateAudioProcessor::holdParamId, 55.0f);
-        setParameterValue(AeroGateAudioProcessor::releaseParamId, 110.0f);
-    }
-    else if (index == 2) // Tom Natural
-    {
-        setParameterValue(AeroGateAudioProcessor::thresholdParamId, -30.0f);
-        setParameterValue(AeroGateAudioProcessor::closeParamId, -36.0f);
-        setParameterValue(AeroGateAudioProcessor::attackParamId, 2.5f);
-        setParameterValue(AeroGateAudioProcessor::holdParamId, 120.0f);
-        setParameterValue(AeroGateAudioProcessor::releaseParamId, 320.0f);
-        setParameterValue(AeroGateAudioProcessor::depthParamId, -30.0f);
-        setParameterValue(AeroGateAudioProcessor::hpfParamId, 35.0f);
-        setParameterValue(AeroGateAudioProcessor::lpfParamId, 1800.0f);
-    }
-    else if (index == 3) // Ducking
-    {
-        setParameterValue(AeroGateAudioProcessor::modeParamId, 1.0f);
-        setParameterValue(AeroGateAudioProcessor::depthParamId, -18.0f);
-        setParameterValue(AeroGateAudioProcessor::releaseParamId, 250.0f);
-    }
+    const auto& p = aeroGatePresets[static_cast<size_t>(index - 1)];
+    setParameterValue(AeroGateAudioProcessor::thresholdParamId, p.threshold);
+    setParameterValue(AeroGateAudioProcessor::closeParamId, p.close);
+    setParameterValue(AeroGateAudioProcessor::lookaheadParamId, p.lookahead);
+    setParameterValue(AeroGateAudioProcessor::attackParamId, p.attack);
+    setParameterValue(AeroGateAudioProcessor::holdParamId, p.hold);
+    setParameterValue(AeroGateAudioProcessor::releaseParamId, p.release);
+    setParameterValue(AeroGateAudioProcessor::depthParamId, p.depth);
+    setParameterValue(AeroGateAudioProcessor::hpfParamId, p.hpf);
+    setParameterValue(AeroGateAudioProcessor::lpfParamId, p.lpf);
+    setParameterValue(AeroGateAudioProcessor::attackCurveParamId, static_cast<float>(p.attackCurve));
+    setParameterValue(AeroGateAudioProcessor::releaseCurveParamId, static_cast<float>(p.releaseCurve));
+    setParameterValue(AeroGateAudioProcessor::modeParamId, p.ducking ? 1.0f : 0.0f);
 
+    presetBox.setSelectedId(index + 1, juce::dontSendNotification);
     updateButtonStates();
     updateDepthState();
+    gatePreview.repaint();
 }
 
 void AeroGateAudioProcessorEditor::updateButtonStates()
