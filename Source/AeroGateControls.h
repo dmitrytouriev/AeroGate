@@ -217,16 +217,31 @@ class DepthSlider final : public juce::Slider
 {
 public:
     std::function<void()> onClickWithoutDrag;
+    std::function<void()> onDragStarted;
 
     void mouseDown(const juce::MouseEvent& e) override
     {
         downPos = e.position;
+        didDrag = false;
         juce::Slider::mouseDown(e);
+    }
+
+    void mouseDrag(const juce::MouseEvent& e) override
+    {
+        // A real movement immediately leaves infinity, even if the value
+        // has not changed yet (e.g. the slider was at the end stop).
+        if (!didDrag && e.position.getDistanceFrom(downPos) >= 4.0f)
+        {
+            didDrag = true;
+            if (onDragStarted)
+                onDragStarted();
+        }
+        juce::Slider::mouseDrag(e);
     }
 
     void mouseUp(const juce::MouseEvent& e) override
     {
-        const bool click = e.position.getDistanceFrom(downPos) < 4.0f;
+        const bool click = !didDrag && e.position.getDistanceFrom(downPos) < 4.0f;
         juce::Slider::mouseUp(e);
         if (click && onClickWithoutDrag)
             onClickWithoutDrag();
@@ -234,5 +249,6 @@ public:
 
 private:
     juce::Point<float> downPos;
+    bool didDrag = false;
 };
 }
