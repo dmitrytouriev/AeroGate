@@ -156,7 +156,7 @@ private:
     juce::TextButton duckButton { "Ducking" };
     juce::TextButton internalButton { "Internal" };
     juce::TextButton externalButton { "External" };
-    juce::TextButton depthInfButton { "-inf" };
+    aerosound::ui::DepthInfinityButton depthInfButton { "-inf" };
 
     aerosound::ui::HeadphoneButton audibleButton { "Audible" };
 
