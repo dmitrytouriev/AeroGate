@@ -103,6 +103,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout AeroGateAudioProcessor::crea
         PID { lpfParamId, 1 }, "Detector LPF",
         makeSkewedRange(200.0f, 20000.0f, 2000.0f), 1000.0f, makeHzAttributes()));
 
+    const juce::StringArray slopes { "12", "18", "24", "36", "48", "96" };
+    layout.add(std::make_unique<juce::AudioParameterChoice>(
+        PID { hpfSlopeParamId, 1 }, "HPF Slope", slopes, 2));
+    layout.add(std::make_unique<juce::AudioParameterChoice>(
+        PID { lpfSlopeParamId, 1 }, "LPF Slope", slopes, 2));
+
     layout.add(std::make_unique<juce::AudioParameterChoice>(
         PID { modeParamId, 1 }, "Mode",
         juce::StringArray { "Gate", "Ducking" }, 0));
@@ -130,11 +136,18 @@ void AeroGateAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBloc
         2
     };
 
-    for (auto* filter : { &bandHp, &bandLp })
-        filter->prepare(spec);
-
-    bandHp.setType(juce::dsp::StateVariableTPTFilterType::highpass);
-    bandLp.setType(juce::dsp::StateVariableTPTFilterType::lowpass);
+    for (auto& filter : bandHp)
+    {
+        filter.prepare(spec);
+        filter.setType(juce::dsp::StateVariableTPTFilterType::highpass);
+    }
+    for (auto& filter : bandLp)
+    {
+        filter.prepare(spec);
+        filter.setType(juce::dsp::StateVariableTPTFilterType::lowpass);
+    }
+    cachedHpCutoff = cachedLpCutoff = -1.0f;
+    cachedHpSlope = cachedLpSlope = -1;
 
     maxDelaySamples = juce::jmax(1, juce::roundToInt(sampleRate * 0.020) + samplesPerBlock + 4);
     delayBuffer.setSize(juce::jmax(2, getTotalNumOutputChannels()), maxDelaySamples, false, true, true);
@@ -154,8 +167,12 @@ void AeroGateAudioProcessor::releaseResources()
 
 void AeroGateAudioProcessor::resetDsp()
 {
-    for (auto* filter : { &bandHp, &bandLp })
-        filter->reset();
+    for (auto& filter : bandHp)
+        filter.reset();
+    for (auto& filter : bandLp)
+        filter.reset();
+    hpOnePoleState.fill(0.0f);
+    lpOnePoleState.fill(0.0f);
 
     delayWriteIndex = 0;
     gateEnvelope = 0.0f;
@@ -193,14 +210,104 @@ bool AeroGateAudioProcessor::isBusesLayoutSupported(const BusesLayout& layouts) 
 
 void AeroGateAudioProcessor::updateFilterCutoffs()
 {
-    const float requestedHp = parameters.getRawParameterValue(hpfParamId)->load();
-    const float requestedLp = parameters.getRawParameterValue(lpfParamId)->load();
+    const float hp = parameters.getRawParameterValue(hpfParamId)->load();
+    const float lp = parameters.getRawParameterValue(lpfParamId)->load();
 
-    const float safeHp = juce::jlimit(20.0f, 19000.0f, juce::jmin(requestedHp, requestedLp * 0.95f));
-    const float safeLp = juce::jlimit(30.0f, 20000.0f, juce::jmax(requestedLp, safeHp * 1.05f));
+    const float nyquistLimit = static_cast<float>(currentSampleRate * 0.45);
+    const float safeHp = juce::jlimit(20.0f, juce::jmin(19000.0f, nyquistLimit),
+                                     juce::jmin(hp, lp * 0.95f));
+    const float safeLp = juce::jlimit(30.0f, juce::jmin(20000.0f, nyquistLimit),
+                                     juce::jmax(lp, safeHp * 1.05f));
 
-    bandHp.setCutoffFrequency(safeHp);
-    bandLp.setCutoffFrequency(safeLp);
+    const int hpChoice = juce::jlimit(0, 5, juce::roundToInt(
+        parameters.getRawParameterValue(hpfSlopeParamId)->load()));
+    const int lpChoice = juce::jlimit(0, 5, juce::roundToInt(
+        parameters.getRawParameterValue(lpfSlopeParamId)->load()));
+
+    if (safeHp == cachedHpCutoff && safeLp == cachedLpCutoff
+        && hpChoice == cachedHpSlope && lpChoice == cachedLpSlope)
+        return;
+
+    static constexpr int orders[] { 2, 3, 4, 6, 8, 16 };
+    const auto setStages = [&](auto& filters, int order, float cutoff)
+    {
+        const int sections = order / 2;
+        for (int i = 0; i < sections; ++i)
+        {
+            // Butterworth poles: each 12 dB/oct section has its own Q.
+            // This maintains a ~-3 dB corner when multiple sections are cascaded.
+            const float angle = juce::MathConstants<float>::pi *
+                                static_cast<float>(2 * i + 1) /
+                                static_cast<float>(2 * order);
+            const float q = 1.0f / (2.0f * std::cos(angle));
+            filters[static_cast<size_t>(i)].setResonance(q);
+            filters[static_cast<size_t>(i)].setCutoffFrequency(cutoff);
+        }
+    };
+
+    const int newHpOrder = orders[hpChoice];
+    const int newLpOrder = orders[lpChoice];
+    const int newHpCount = newHpOrder / 2;
+    const int newLpCount = newLpOrder / 2;
+
+    // On slope changes clear previously inactive stages to avoid stale samples.
+    if (hpChoice != cachedHpSlope)
+    {
+        for (auto& filter : bandHp)
+            filter.reset();
+        hpOnePoleState.fill(0.0f);
+    }
+    if (lpChoice != cachedLpSlope)
+    {
+        for (auto& filter : bandLp)
+            filter.reset();
+        lpOnePoleState.fill(0.0f);
+    }
+
+    setStages(bandHp, newHpOrder, safeHp);
+    setStages(bandLp, newLpOrder, safeLp);
+
+    hpStageCount = newHpCount;
+    lpStageCount = newLpCount;
+    hpExtraPole = (newHpOrder % 2) != 0;
+    lpExtraPole = (newLpOrder % 2) != 0;
+
+    const float sr = juce::jmax(1.0f, static_cast<float>(currentSampleRate));
+    hpOnePoleAlpha = 1.0f - std::exp(-juce::MathConstants<float>::twoPi * safeHp / sr);
+    lpOnePoleAlpha = 1.0f - std::exp(-juce::MathConstants<float>::twoPi * safeLp / sr);
+
+    cachedHpCutoff = safeHp;
+    cachedLpCutoff = safeLp;
+    cachedHpSlope = hpChoice;
+    cachedLpSlope = lpChoice;
+}
+
+float AeroGateAudioProcessor::filterHighPass(float sample, int channel) noexcept
+{
+    for (int i = 0; i < hpStageCount; ++i)
+        sample = bandHp[static_cast<size_t>(i)].processSample(channel, sample);
+
+    if (hpExtraPole)
+    {
+        auto& lowState = hpOnePoleState[static_cast<size_t>(channel)];
+        lowState += hpOnePoleAlpha * (sample - lowState);
+        sample -= lowState;
+    }
+    return sample;
+}
+
+float AeroGateAudioProcessor::filterLowPass(float sample, int channel) noexcept
+{
+    for (int i = 0; i < lpStageCount; ++i)
+        sample = bandLp[static_cast<size_t>(i)].processSample(channel, sample);
+
+    if (lpExtraPole)
+    {
+        auto& lowState = lpOnePoleState[static_cast<size_t>(channel)];
+        lowState += lpOnePoleAlpha * (sample - lowState);
+        sample = lowState;
+    }
+    return sample;
 }
 
 void AeroGateAudioProcessor::updateLatency(float lookaheadMs)
@@ -353,7 +460,7 @@ void AeroGateAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juce
         for (int ch = 0; ch < detectorChannels; ++ch)
         {
             const float raw = detectorInput.getSample(ch, sample);
-            const float band = bandLp.processSample(ch, bandHp.processSample(ch, raw));
+            const float band = filterLowPass(filterHighPass(raw, ch), ch);
 
             detectorBand[static_cast<size_t>(ch)] = band;
             detectorPeak = juce::jmax(detectorPeak, std::abs(band));
