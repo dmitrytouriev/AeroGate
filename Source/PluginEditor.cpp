@@ -646,10 +646,14 @@ void GateEnvelopePreview::mouseDrag(const juce::MouseEvent& e)
     if (!gestureStarted && std::abs(dy) < 10.0f) return;
 
     // Drag the curve upward/downward to snap among 3 shapes.
-    // On falling Release, the corresponding fast/slow directions reverse.
+    // The graph flips vertically in Ducking: swap drag direction to
+    // keep the mouse gesture consistent with the visible curve.
+    const bool ducking = processor.getValueTreeState().getRawParameterValue(
+        AeroGateAudioProcessor::modeParamId)->load() >= 0.5f;
+    const bool risingOnGraph = (dragging == Segment::attack) != ducking;
     int shape = 1; // Linear
-    if (dy <= -10.0f) shape = (dragging == Segment::attack ? 0 : 2);
-    if (dy >= 10.0f)  shape = (dragging == Segment::attack ? 2 : 0);
+    if (dy <= -10.0f) shape = risingOnGraph ? 0 : 2;
+    if (dy >= 10.0f)  shape = risingOnGraph ? 2 : 0;
 
     if (!gestureStarted)
     {
@@ -964,6 +968,15 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
     depthSlider.setTextBoxStyle(juce::Slider::NoTextBox, false, 0, 0);
     depthSlider.setRange(-80.0, 0.0, 0.1);
     depthSlider.setSliderSnapsToMousePosition(false);
+    depthSlider.onDragStarted = [this]
+    {
+        if (processor.getValueTreeState().getRawParameterValue(
+                AeroGateAudioProcessor::depthInfParamId)->load() >= 0.5f)
+        {
+            setParameterValue(AeroGateAudioProcessor::depthInfParamId, 0.0f);
+            updateDepthState();
+        }
+    };
     depthSlider.onClickWithoutDrag = [this]
     {
         const bool inf = processor.getValueTreeState().getRawParameterValue(
@@ -1457,9 +1470,9 @@ void AeroGateAudioProcessorEditor::resetDefaults()
     setParameterValue(AeroGateAudioProcessor::depthParamId, -40.0f);
     setParameterValue(AeroGateAudioProcessor::depthInfParamId, 0.0f);
     setParameterValue(AeroGateAudioProcessor::hpfParamId, 20.0f);
-    setParameterValue(AeroGateAudioProcessor::lpfParamId, 1000.0f);
-    setParameterValue(AeroGateAudioProcessor::hpfSlopeParamId, 2.0f);
-    setParameterValue(AeroGateAudioProcessor::lpfSlopeParamId, 2.0f);
+    setParameterValue(AeroGateAudioProcessor::lpfParamId, 20000.0f);
+    setParameterValue(AeroGateAudioProcessor::hpfSlopeParamId, 5.0f);
+    setParameterValue(AeroGateAudioProcessor::lpfSlopeParamId, 5.0f);
     setParameterValue(AeroGateAudioProcessor::modeParamId, 0.0f);
     setParameterValue(AeroGateAudioProcessor::externalSidechainParamId, 0.0f);
     setParameterValue(AeroGateAudioProcessor::audibleParamId, 0.0f);
