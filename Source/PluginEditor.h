@@ -51,9 +51,17 @@ class GateEnvelopePreview final : public juce::Component
 public:
     explicit GateEnvelopePreview(AeroGateAudioProcessor&);
     void paint(juce::Graphics&) override;
+    void mouseDown(const juce::MouseEvent&) override;
+    void mouseDrag(const juce::MouseEvent&) override;
+    void mouseUp(const juce::MouseEvent&) override;
 
 private:
+    enum class Segment { none, attack, release };
     AeroGateAudioProcessor& processor;
+    Segment dragging = Segment::none;
+    juce::AudioProcessorParameter* dragParameter = nullptr;
+    float mouseStartY = 0.0f;
+    bool gestureStarted = false;
 };
 
 class DetectorScope final : public juce::Component
