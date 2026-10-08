@@ -607,7 +607,7 @@ void GateEnvelopePreview::paint(juce::Graphics& g)
     g.setColour(juce::Colour(ink));
     g.drawText(depthInf ? juce::String::fromUTF8("−∞")
                         : juce::String(depthReadout, 1) + " dB",
-               juce::Rectangle<int>(384, 181, 64, 19), juce::Justification::centred);
+               juce::Rectangle<int>(384, 176, 64, 19), juce::Justification::centred);
 }
 
 void GateEnvelopePreview::mouseDown(const juce::MouseEvent& e)
@@ -1417,7 +1417,7 @@ void AeroGateAudioProcessorEditor::resized()
     set(holdUnit, 317, 654, 21, 20);
     set(releaseUnit, 415, 654, 21, 20);
     // DEPTH spans almost the full block height, unlike the small time knobs.
-    set(depthSlider, 444, 480, 52, 152);
+    set(depthSlider, 444, 468, 52, 153);
     set(depthInfButton, 438, 653, 60, 27);
     // Full-panel envelope: sliders sit visually on top of the curve.
     set(gatePreview, 44, 455, 448, 220);
