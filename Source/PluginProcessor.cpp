@@ -107,7 +107,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout AeroGateAudioProcessor::crea
 
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         PID { lpfParamId, 1 }, "Detector LPF",
-        makeSkewedRange(20.0f, 20000.0f, 2000.0f), 1000.0f, makeHzAttributes()));
+        makeSkewedRange(20.0f, 20000.0f, 2000.0f), 20000.0f, makeHzAttributes()));
 
     const juce::StringArray slopes { "12", "18", "24", "36", "48", "96" };
     layout.add(std::make_unique<juce::AudioParameterChoice>(
