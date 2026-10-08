@@ -33,6 +33,11 @@ juce_add_plugin(AeroGate
     PRODUCT_NAME "AeroGate"
 )
 
+juce_add_binary_data(AeroGateAssets
+    SOURCES
+        Resources/ozon_qr.png
+)
+
 juce_generate_juce_header(AeroGate)
 
 target_sources(AeroGate
@@ -58,6 +63,7 @@ endif()
 
 target_link_libraries(AeroGate
     PRIVATE
+        AeroGateAssets
         juce::juce_audio_utils
         juce::juce_dsp
     PUBLIC
