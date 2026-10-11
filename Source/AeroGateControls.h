@@ -181,6 +181,33 @@ public:
         g.setColour(button.findColour(button.getToggleState()
                                           ? juce::TextButton::textColourOnId
                                           : juce::TextButton::textColourOffId));
+        if (button.getComponentID() == "donate-heart")
+        {
+            // A crisp red heart rather than a font-dependent emoji.
+            // Keep the Donate caption its usual ink colour.
+            const auto bounds = button.getLocalBounds().toFloat();
+            g.drawFittedText(button.getButtonText(),
+                             button.getLocalBounds().withTrimmedRight(18).reduced(3, 2),
+                             juce::Justification::centred, 1);
+
+            const float cx = bounds.getRight() - 13.5f;
+            const float cy = bounds.getCentreY();
+            juce::Path heart;
+            heart.startNewSubPath(cx, cy + 6.5f);
+            heart.cubicTo(cx - 3.0f, cy + 3.5f, cx - 9.0f, cy,
+                          cx - 7.0f, cy - 5.0f);
+            heart.cubicTo(cx - 5.5f, cy - 8.5f, cx - 1.0f, cy - 7.0f,
+                          cx, cy - 4.0f);
+            heart.cubicTo(cx + 1.0f, cy - 7.0f, cx + 5.5f, cy - 8.5f,
+                          cx + 7.0f, cy - 5.0f);
+            heart.cubicTo(cx + 9.0f, cy, cx + 3.0f, cy + 3.5f,
+                          cx, cy + 6.5f);
+            heart.closeSubPath();
+            g.setColour(juce::Colour(0xffe53b50));
+            g.fillPath(heart);
+            return;
+        }
+
         g.drawFittedText(button.getButtonText(), button.getLocalBounds().reduced(6, 2),
                          juce::Justification::centred, 1);
     }
