@@ -152,7 +152,7 @@ private:
     juce::Label hpfUnit;
     juce::Label lpfUnit;
 
-    juce::TextButton gateButton { "Gate" };
+    juce::TextButton gateButton { "Normal" };
     juce::TextButton duckButton { "Ducking" };
     juce::TextButton internalButton { "Internal" };
     juce::TextButton externalButton { "External" };
