@@ -676,11 +676,18 @@ void GateEnvelopePreview::paint(juce::Graphics& g)
     // Parent editor labels would otherwise be hidden behind this full-panel child.
     g.setFont(uiFont(11.5f));
     g.setColour(juce::Colour(mutedInk));
-    g.drawText("LOOKAHEAD", juce::Rectangle<int>(0, 126, 94, 18), juce::Justification::centred);
-    g.drawText("ATTACK", juce::Rectangle<int>(98, 126, 92, 18), juce::Justification::centred);
-    g.drawText("HOLD", juce::Rectangle<int>(196, 126, 92, 18), juce::Justification::centred);
-    g.drawText("RELEASE", juce::Rectangle<int>(294, 126, 92, 18), juce::Justification::centred);
-    g.drawText("DEPTH", juce::Rectangle<int>(390, 3, 58, 18), juce::Justification::centred);
+    const float labelScaleX = getWidth() / 558.0f;
+    const float labelScaleY = getHeight() / 220.0f;
+    auto captionRect = [labelScaleX, labelScaleY](float x, float y, float w, float h)
+    {
+        return juce::Rectangle<float>(x * labelScaleX, y * labelScaleY,
+                                      w * labelScaleX, h * labelScaleY);
+    };
+    g.drawText("LOOKAHEAD", captionRect(8, 126, 102, 18), juce::Justification::centred);
+    g.drawText("ATTACK", captionRect(123, 126, 102, 18), juce::Justification::centred);
+    g.drawText("HOLD", captionRect(238, 126, 102, 18), juce::Justification::centred);
+    g.drawText("RELEASE", captionRect(353, 126, 102, 18), juce::Justification::centred);
+    g.drawText("DEPTH", captionRect(483, 3, 64, 18), juce::Justification::centred);
 
     // Current Depth value is rendered on the slider's moving thumb.
     // In -inf the thumb is parked in the button directly below the rail.
@@ -789,8 +796,14 @@ void DetectorScope::paint(juce::Graphics& g)
     // Full-panel EQ: labels are painted inside the child, above floating knobs.
     g.setColour(juce::Colour(mutedInk));
     g.setFont(uiFont(11.5f));
-    g.drawText("HPF", juce::Rectangle<int>(7, 107, 90, 18), juce::Justification::centred);
-    g.drawText("LPF", juce::Rectangle<int>(232, 107, 90, 18), juce::Justification::centred);
+    const float labelScaleX = getWidth() / 410.0f;
+    const float labelScaleY = getHeight() / 220.0f;
+    g.drawText("HPF", juce::Rectangle<float>(6.0f * labelScaleX, 107.0f * labelScaleY,
+                                            95.0f * labelScaleX, 18.0f * labelScaleY),
+               juce::Justification::centred);
+    g.drawText("LPF", juce::Rectangle<float>(303.0f * labelScaleX, 107.0f * labelScaleY,
+                                            95.0f * labelScaleX, 18.0f * labelScaleY),
+               juce::Justification::centred);
 
     auto plot = bounds.reduced(9.0f, 3.0f);
     plot.removeFromTop(15.0f);
@@ -1459,9 +1472,10 @@ void AeroGateAudioProcessorEditor::paint(juce::Graphics& g)
         return juce::Rectangle<float>(x * sx, y * sy, w * sx, h * sy);
     };
 
-    drawPanel(g, rect(28, 405, 480, 285));
-    drawPanel(g, rect(520, 405, 180, 285));
-    drawPanel(g, rect(712, 405, 360, 285));
+    // MODE and SIDECHAIN selectors now belong to their respective signal blocks.
+    // The former middle panel's space goes to the envelope and detector graphs.
+    drawPanel(g, rect(28, 405, 590, 285));
+    drawPanel(g, rect(630, 405, 442, 285));
     drawPanel(g, rect(28, 704, 1044, 42));
 
     // Reflected halfwave is lightly visible underneath lower glass panels.
@@ -1480,22 +1494,15 @@ void AeroGateAudioProcessorEditor::paint(juce::Graphics& g)
 
     g.setColour(juce::Colour(ink));
     g.setFont(uiFont(19.0f * s, juce::Font::bold));
-    g.drawText("GATE", rect(45, 418, 100, 28), juce::Justification::centredLeft);
-    g.drawText("MODE", rect(536, 418, 100, 28), juce::Justification::centredLeft);
-    g.drawText("DETECTOR", rect(730, 418, 112, 28), juce::Justification::centredLeft);
-
-
-    g.setFont(uiFont(15.0f * s, juce::Font::bold));
-    g.drawText("SIDECHAIN", rect(536, 572, 130, 24), juce::Justification::centredLeft);
+    g.drawText("GATE", rect(45, 418, 75, 28), juce::Justification::centredLeft);
+    g.drawText("DETECTOR", rect(648, 418, 106, 28), juce::Justification::centredLeft);
 
     g.setFont(uiFont(14.0f * s, juce::Font::bold));
     g.drawText("PRESET", rect(48, 710, 72, 28), juce::Justification::centredLeft);
 
     g.setColour(juce::Colour(lineBlue).withAlpha(0.48f));
-    g.drawLine(44.0f * sx, 448.0f * sy, 492.0f * sx, 448.0f * sy, 1.0f * s);
-    g.drawLine(536.0f * sx, 448.0f * sy, 684.0f * sx, 448.0f * sy, 1.0f * s);
-    g.drawLine(728.0f * sx, 448.0f * sy, 1056.0f * sx, 448.0f * sy, 1.0f * s);
-    g.drawLine(536.0f * sx, 600.0f * sy, 684.0f * sx, 600.0f * sy, 1.0f * s);
+    g.drawLine(44.0f * sx, 448.0f * sy, 602.0f * sx, 448.0f * sy, 1.0f * s);
+    g.drawLine(646.0f * sx, 448.0f * sy, 1056.0f * sx, 448.0f * sy, 1.0f * s);
 
 
 }
@@ -1514,37 +1521,36 @@ void AeroGateAudioProcessorEditor::resized()
 
     set(signalFlow, 28, 90, 1044, 300);
 
-    // The four time knobs form a compact row at the very bottom of GATE.
-    set(lookaheadSlider, 45, 591, 92, 85);
-    set(attackSlider, 143, 591, 92, 85);
-    set(holdSlider, 241, 591, 92, 85);
-    set(releaseSlider, 339, 591, 92, 85);
-    set(lookaheadUnit, 121, 654, 21, 20);
-    set(attackUnit, 219, 654, 21, 20);
-    set(holdUnit, 317, 654, 21, 20);
-    set(releaseUnit, 415, 654, 21, 20);
-    // DEPTH spans almost the full block height, unlike the small time knobs.
-    set(depthSlider, 436, 477, 61, 147);
-    set(depthInfButton, 437, 626, 60, 31);
-    // Full-panel envelope: sliders sit visually on top of the curve.
-    set(gatePreview, 44, 455, 448, 220);
+    // Full-width GATE chart, with the time controls along its bottom edge.
+    set(lookaheadSlider, 52, 591, 102, 85);
+    set(attackSlider, 167, 591, 102, 85);
+    set(holdSlider, 282, 591, 102, 85);
+    set(releaseSlider, 397, 591, 102, 85);
+    set(lookaheadUnit, 137, 654, 21, 20);
+    set(attackUnit, 252, 654, 21, 20);
+    set(holdUnit, 367, 654, 21, 20);
+    set(releaseUnit, 482, 654, 21, 20);
+    set(depthSlider, 527, 477, 64, 147);
+    set(depthInfButton, 529, 626, 60, 31);
+    set(gatePreview, 44, 455, 558, 220);
 
-    set(gateButton, 536, 465, 72, 38);
-    set(duckButton, 610, 465, 74, 38);
-    set(internalButton, 536, 615, 74, 38);
-    set(externalButton, 612, 615, 72, 38);
+    // Gate mode is chosen beside GATE, not in a separate centre panel.
+    set(gateButton, 126, 414, 85, 31);
+    set(duckButton, 217, 414, 94, 31);
 
-    // Detector cutoffs occupy opposite edges, leaving the response curve open.
-    set(hpfSlider, 733, 568, 92, 80);
-    set(lpfSlider, 960, 568, 92, 80);
-    set(hpfUnit, 810, 627, 39, 20);
-    set(lpfUnit, 1035, 627, 31, 20);
-    set(hpfSlopeBox, 735, 654, 108, 26);
-    set(lpfSlopeBox, 949, 654, 108, 26);
-    // Small headphone icon beside the DETECTOR heading.
-    set(audibleButton, 846, 417, 29, 29);
-    // Full-panel detector EQ with HPF/LPF knobs floating above it.
-    set(detectorScope, 728, 455, 328, 220);
+    // Sidechain source is chosen beside DETECTOR, with Audition alongside.
+    set(internalButton, 807, 414, 111, 31);
+    set(externalButton, 924, 414, 117, 31);
+    set(audibleButton, 759, 415, 29, 29);
+
+    // Expanded detector plot; HPF and LPF remain on opposite edges.
+    set(hpfSlider, 652, 568, 95, 80);
+    set(lpfSlider, 949, 568, 95, 80);
+    set(hpfUnit, 730, 627, 39, 20);
+    set(lpfUnit, 1027, 627, 31, 20);
+    set(hpfSlopeBox, 650, 654, 108, 26);
+    set(lpfSlopeBox, 944, 654, 108, 26);
+    set(detectorScope, 646, 455, 410, 220);
 
     set(presetBox, 122, 711, 200, 28);
     set(presetPrev, 330, 711, 42, 28);
