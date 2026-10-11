@@ -1570,9 +1570,11 @@ void AeroGateAudioProcessorEditor::setParameterValue(const char* id, float value
 {
     if (auto* parameter = processor.getValueTreeState().getParameter(id))
     {
+        processor.beginHistoryGesture();
         parameter->beginChangeGesture();
         parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
         parameter->endChangeGesture();
+        processor.endHistoryGesture();
     }
 }
 
