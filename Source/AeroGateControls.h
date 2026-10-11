@@ -213,6 +213,30 @@ public:
     }
 };
 
+// The rotary wheel should accept clicks only on the rendered dial (or its
+// numeric text field). Transparent corners pass straight through to the
+// envelope/spectrum graph beneath it instead of turning a hidden knob.
+class CurveAwareKnob final : public juce::Slider
+{
+public:
+    bool hitTest(int x, int y) override
+    {
+        const int dialHeight = juce::jmax(0, getHeight() - 22);
+        const float centreX = getWidth() * 0.5f;
+        const float centreY = dialHeight * 0.5f;
+        const float radius = juce::jmax(11.0f,
+            juce::jmin(static_cast<float>(getWidth()),
+                       static_cast<float>(dialHeight)) * 0.5f - 4.0f);
+        const float dx = x - centreX, dy = y - centreY;
+        const bool insideDial = dx * dx + dy * dy <= radius * radius;
+
+        // Preserve click-to-edit on the separate numerical text box.
+        const bool inText = y >= dialHeight
+            && std::abs(dx) <= 32.0f && y < getHeight();
+        return insideDial || inText;
+    }
+};
+
 class HeadphoneButton final : public juce::Button
 {
 public:
