@@ -111,6 +111,7 @@ private:
     mutable juce::CriticalSection historyLock;
     std::vector<ParameterSnapshot> history;
     ParameterSnapshot userDefault {};
+    ParameterSnapshot factoryDefaults {};
     size_t historyIndex = 0;
     int historyGestureDepth = 0;
     bool customDefault = false;
