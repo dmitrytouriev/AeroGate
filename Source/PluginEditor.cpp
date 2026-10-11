@@ -1298,6 +1298,7 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
         syncBypass();
     };
 
+    donateButton.setComponentID("donate-heart");
     donateButton.setTooltip("Support AeroGate development");
     donateButton.onClick = [this]
     {
