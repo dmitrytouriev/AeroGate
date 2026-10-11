@@ -122,6 +122,7 @@ private:
     void setParameterValue(const char* id, float value);
     void resetDefaults();
     void updateHistoryButtons();
+    void showHistoryMenu();
     void updateButtonStates();
     void updateDepthState();
     void updateAuditionState();
@@ -162,7 +163,7 @@ private:
     aerosound::ui::HeadphoneButton audibleButton { "Audible" };
 
     juce::TextButton setDefaultButton { "Set as Default" };
-    juce::TextButton undoButton { "Undo" };
+    aerosound::ui::HistoryUndoButton undoButton { "Undo" };
     juce::TextButton redoButton { "Redo" };
     juce::TextButton resetButton { "Reset" };
     juce::TextButton helpButton { "Help" };
