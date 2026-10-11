@@ -67,7 +67,9 @@ EnvelopeTimeline makeEnvelopeTimeline(juce::Rectangle<float> chart,
     const float left = chart.getX() + 4.0f;
     // Reserve the right end for the Depth slider, which overlays the plot.
     const float right = chart.getRight() - juce::jmin(64.0f, chart.getWidth() * 0.14f);
-    const float transient = left + (right - left) * 0.38f;
+    // Keep the arrival marker fixed, but put it closer to the left edge.
+    // The old 38% anchor wasted space before the envelope at 40 ms.
+    const float transient = left + (right - left) * 0.19f;
     const float postMs = juce::jmax(0.001f, attackMs + holdMs + releaseMs);
 
     // Scale to the CURRENT envelope, not the maximum possible 40 ms.
@@ -1032,8 +1034,9 @@ void AeroGateAudioProcessorEditor::PopupOverlay::paint(juce::Graphics& g)
 
     if (!donation)
     {
-        // Aerosound AutoTrim Help: full-screen wash and contextual yellow cards.
-        g.setColour(juce::Colours::white.withAlpha(0.46f));
+        // AeroGate Help. Keep the explanations in sync with the current
+        // controls, two-stage Reset, fixed HIT marker, and persistent Undo.
+        g.setColour(juce::Colours::white.withAlpha(0.57f));
         g.fillAll();
 
         const auto rect = [sx, sy](float x, float y, float w, float h)
@@ -1044,32 +1047,51 @@ void AeroGateAudioProcessorEditor::PopupOverlay::paint(juce::Graphics& g)
                                         juce::roundToInt(h * sy));
         };
 
-        const auto drawCard = [&](juce::Rectangle<int> r, const juce::String& message)
+        const auto drawCard = [&](juce::Rectangle<int> r, const juce::String& heading,
+                                  const juce::String& message)
         {
-            g.setColour(juce::Colours::black.withAlpha(0.11f));
+            g.setColour(juce::Colours::black.withAlpha(0.10f));
             g.fillRoundedRectangle(r.toFloat().translated(2.0f * s, 3.0f * s), 7.0f * s);
             g.setColour(juce::Colour(0xffffefad));
             g.fillRoundedRectangle(r.toFloat(), 7.0f * s);
             g.setColour(juce::Colour(0xffd7a92c));
             g.drawRoundedRectangle(r.toFloat(), 7.0f * s, 1.3f * s);
+
+            auto content = r.reduced(juce::roundToInt(14.0f * s),
+                                     juce::roundToInt(8.0f * s));
             g.setColour(juce::Colour(ink));
-            g.setFont(uiFont(17.0f * s, juce::Font::bold));
-            g.drawFittedText(message,
-                             r.reduced(juce::roundToInt(10.0f * s),
-                                       juce::roundToInt(7.0f * s)),
-                             juce::Justification::centred, 3, 0.93f);
+            g.setFont(uiFont(15.5f * s, juce::Font::bold));
+            const int titleHeight = juce::roundToInt(23.0f * s);
+            g.drawFittedText(heading, content.removeFromTop(titleHeight),
+                             juce::Justification::centredLeft, 1);
+            g.setFont(uiFont(13.8f * s));
+            g.drawFittedText(message, content,
+                             juce::Justification::centredLeft, 4, 0.91f);
         };
 
-        drawCard(rect(365, 117, 380, 68),
-                 "THRESHOLD opens the gate. CLOSE sets its lower closing level; click CLOSE to link.");
-        drawCard(rect(43, 573, 361, 76),
-                 "LOOKAHEAD sets timing. Drag ATTACK/RELEASE curves vertically for Fast, Linear or Slow. DEPTH goes to -80 dB or infinity.");
-        drawCard(rect(515, 516, 184, 90),
-                 "MODE selects Gate or Ducking. SIDECHAIN selects the detector source.");
-        drawCard(rect(718, 570, 345, 82),
-                 "HPF/LPF shape the live detector EQ. INPUT shows the filtered detector; OUTPUT shows gated audio.");
-        drawCard(rect(404, 656, 292, 51),
-                 "Esc or click empty space to close Help.");
+        drawCard(rect(44, 109, 492, 103), "THRESHOLD & CLOSE",
+                 "THRESHOLD opens the gate. CLOSE adds hysteresis and starts off by default. "
+                 "Click CLOSE to toggle it; moving THRESHOLD keeps the level gap.");
+        drawCard(rect(564, 109, 492, 103), "NORMAL / DUCKING",
+                 "Normal attenuates signals below the threshold; Ducking attenuates "
+                 "signals above it. Internal/External selects the detector; "
+                 "the headphone button auditions it.");
+        drawCard(rect(44, 434, 492, 116), "LOOKAHEAD & ENVELOPE",
+                 "The orange HIT marker is when audio arrives. Lookahead starts opening "
+                 "the gate before HIT. Attack, Hold and Release set the timing. "
+                 "Drag either curve to change Fast, Linear or Slow.");
+        drawCard(rect(564, 434, 492, 116), "DETECTOR & DEPTH",
+                 "HPF/LPF filter the detector, with selectable slopes; they do not "
+                 "EQ the output. DEPTH is closed-gate attenuation. "
+                 "Press the infinity button for complete muting.");
+        drawCard(rect(44, 598, 492, 116), "DEFAULT & RESET",
+                 "Set as Default saves settings only for this plugin instance. "
+                 "Reset returns to that default; press Reset again for factory "
+                 "settings, which become the new default.");
+        drawCard(rect(564, 598, 492, 116), "UNDO / REDO & HELP",
+                 "Undo/Redo saves 200 steps with the DAW project. "
+                 "Right-click Undo to jump to any state, including Redo. "
+                 "Press Esc or click anywhere to close Help.");
         return;
     }
 
