@@ -671,6 +671,7 @@ void AeroGateAudioProcessor::captureHistoryStep()
     if (snapshotsEqual(history[historyIndex], now))
         return;
 
+    factoryResetArmed = false;
     // Creating an edit after Undo invalidates the Redo branch.
     history.erase(history.begin() + static_cast<std::ptrdiff_t>(historyIndex + 1), history.end());
     history.push_back(now);
@@ -737,6 +738,10 @@ bool AeroGateAudioProcessor::undo()
         target = history[--historyIndex];
     }
     applySnapshot(target);
+    {
+        const juce::ScopedLock lock(historyLock);
+        factoryResetArmed = false;
+    }
     return true;
 }
 
@@ -751,6 +756,10 @@ bool AeroGateAudioProcessor::redo()
         target = history[++historyIndex];
     }
     applySnapshot(target);
+    {
+        const juce::ScopedLock lock(historyLock);
+        factoryResetArmed = false;
+    }
     return true;
 }
 
@@ -773,12 +782,21 @@ void AeroGateAudioProcessor::setAsDefault()
     const juce::ScopedLock lock(historyLock);
     userDefault = now;
     customDefault = true;
+    factoryResetArmed = false;
 }
 
 bool AeroGateAudioProcessor::hasUserDefault() const
 {
     const juce::ScopedLock lock(historyLock);
     return customDefault;
+}
+
+bool AeroGateAudioProcessor::isFactoryResetArmed() const
+{
+    const auto now = readSnapshot();
+    const juce::ScopedLock lock(historyLock);
+    return factoryResetArmed && customDefault
+        && snapshotsEqual(now, userDefault);
 }
 
 bool AeroGateAudioProcessor::defaultMatchesCurrent() const
@@ -791,13 +809,37 @@ bool AeroGateAudioProcessor::defaultMatchesCurrent() const
 void AeroGateAudioProcessor::resetToDefault()
 {
     ParameterSnapshot target {};
+    bool factoryReset = false;
     {
+        const auto current = readSnapshot();
         const juce::ScopedLock lock(historyLock);
-        target = userDefault;
+        factoryReset = factoryResetArmed && customDefault
+            && snapshotsEqual(current, userDefault);
+        target = factoryReset ? factoryDefaults : userDefault;
+        factoryResetArmed = false;
     }
+
+    // Each Reset operation is a single history step, independently undoable.
     beginHistoryGesture();
     applySnapshot(target);
     endHistoryGesture();
+
+    {
+        const juce::ScopedLock lock(historyLock);
+        if (factoryReset)
+        {
+            // Pin factory settings as the new per-instance default.
+            userDefault = factoryDefaults;
+            customDefault = true;
+            factoryResetArmed = false;
+        }
+        else
+        {
+            // Visual second stage: muted Reset stays clickable.
+            factoryResetArmed = customDefault
+                && !snapshotsEqual(userDefault, factoryDefaults);
+        }
+    }
 }
 
 juce::ValueTree AeroGateAudioProcessor::serializeHistory() const
@@ -807,6 +849,7 @@ juce::ValueTree AeroGateAudioProcessor::serializeHistory() const
     root.setProperty("version", 1, nullptr);
     root.setProperty("index", static_cast<int>(historyIndex), nullptr);
     root.setProperty("customDefault", customDefault, nullptr);
+    root.setProperty("factoryResetArmed", factoryResetArmed, nullptr);
 
     auto writeStep = [](const char* kind, const ParameterSnapshot& values)
     {
@@ -831,6 +874,7 @@ void AeroGateAudioProcessor::loadHistory(const juce::ValueTree& saved)
     applyingSnapshot = false;
     userDefault = factoryDefaults;
     customDefault = false;
+    factoryResetArmed = false;
 
     if (saved.isValid() && static_cast<int>(saved.getProperty("version", 0)) == 1)
     {
@@ -839,6 +883,9 @@ void AeroGateAudioProcessor::loadHistory(const juce::ValueTree& saved)
             for (size_t i = 0; i < userDefault.size(); ++i)
                 userDefault[i] = static_cast<float>(def.getProperty(historyParamIds[i], now[i]));
             customDefault = static_cast<bool>(saved.getProperty("customDefault", false));
+            factoryResetArmed = customDefault
+                && static_cast<bool>(saved.getProperty("factoryResetArmed", false))
+                && snapshotsEqual(now, userDefault);
         }
 
         for (int i = 0; i < saved.getNumChildren(); ++i)
