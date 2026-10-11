@@ -64,15 +64,20 @@ EnvelopeTimeline makeEnvelopeTimeline(juce::Rectangle<float> chart,
                                       float lookaheadMs, float attackMs,
                                       float holdMs, float releaseMs) noexcept
 {
-    constexpr float maxLookaheadMs = 40.0f;
     const float left = chart.getX() + 4.0f;
     // Reserve the right end for the Depth slider, which overlays the plot.
     const float right = chart.getRight() - juce::jmin(64.0f, chart.getWidth() * 0.14f);
     const float transient = left + (right - left) * 0.38f;
     const float postMs = juce::jmax(0.001f, attackMs + holdMs + releaseMs);
+
+    // Scale to the CURRENT envelope, not the maximum possible 40 ms.
+    // One shared pixels/ms ratio keeps Attack/Hold/Release and the lead-in
+    // perceptually comparable, while the arrival marker stays fixed.
+    const float leftSpace = juce::jmax(1.0f, transient - left - 7.0f);
+    const float rightSpace = juce::jmax(1.0f, right - transient - 7.0f);
     const float pxPerMs = juce::jmin(
-        (transient - left) / maxLookaheadMs,
-        (right - transient) / postMs);
+        leftSpace / juce::jmax(0.1f, lookaheadMs),
+        rightSpace / postMs);
 
     const float start = transient - lookaheadMs * pxPerMs;
     const float attackEnd = start + attackMs * pxPerMs;
@@ -664,9 +669,11 @@ void GateEnvelopePreview::paint(juce::Graphics& g)
     appendCurve(x1, x2, idleY, activeY, attackShape);
     env.lineTo(x3, activeY);
     appendCurve(x3, x4, activeY, idleY, releaseShape);
+    // Continue the settled envelope to the plot edge in BOTH modes.
+    env.lineTo(chart.getRight(), idleY);
 
     juce::Path fill = env;
-    fill.lineTo(x4, bottomY);
+    fill.lineTo(chart.getRight(), bottomY);
     fill.lineTo(x0, bottomY);
     fill.closeSubPath();
 
@@ -861,10 +868,10 @@ void DetectorScope::paint(juce::Graphics& g)
     g.setFont(uiFont(11.5f));
     const float labelScaleX = getWidth() / 410.0f;
     const float labelScaleY = getHeight() / 220.0f;
-    g.drawText("HPF", juce::Rectangle<float>(6.0f * labelScaleX, 107.0f * labelScaleY,
+    g.drawText("HPF", juce::Rectangle<float>(6.0f * labelScaleX, 88.0f * labelScaleY,
                                             95.0f * labelScaleX, 18.0f * labelScaleY),
                juce::Justification::centred);
-    g.drawText("LPF", juce::Rectangle<float>(303.0f * labelScaleX, 107.0f * labelScaleY,
+    g.drawText("LPF", juce::Rectangle<float>(303.0f * labelScaleX, 88.0f * labelScaleY,
                                             95.0f * labelScaleX, 18.0f * labelScaleY),
                juce::Justification::centred);
 
