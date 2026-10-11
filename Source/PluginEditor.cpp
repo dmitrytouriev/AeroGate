@@ -1342,8 +1342,9 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
         processor.setAsDefault();
         updateHistoryButtons();
     };
-    undoButton.setTooltip("Undo last parameter change");
+    undoButton.setTooltip("Undo last change (right-click to browse full history)");
     redoButton.setTooltip("Redo last undone change");
+    undoButton.onHistoryMenu = [this] { showHistoryMenu(); };
     undoButton.onClick = [this]
     {
         if (processor.undo())
@@ -1673,10 +1674,58 @@ void AeroGateAudioProcessorEditor::resetDefaults()
     updateHistoryButtons();
 }
 
+void AeroGateAudioProcessorEditor::showHistoryMenu()
+{
+    processor.captureHistoryStep();
+    const auto labels = processor.getHistoryLabels();
+    const int current = processor.getHistoryPosition();
+
+    juce::PopupMenu menu;
+    menu.addSectionHeader("AeroGate history");
+    // Newest first. Entries after the current position are Redo states.
+    // JUCE scrolls the popup when there are too many items for the screen.
+    for (int index = labels.size() - 1; index >= 0; --index)
+    {
+        const auto prefix = index == current ? "Current: "
+                          : index > current ? "Redo: " : "Undo: ";
+        menu.addItem(index + 1, juce::String(prefix) + labels[index],
+                     true, index == current);
+    }
+
+    juce::Component::SafePointer<AeroGateAudioProcessorEditor> safeEditor(this);
+    menu.showMenuAsync(juce::PopupMenu::Options()
+                           .withTargetComponent(&undoButton)
+                           .withMinimumWidth(330)
+                           .withMaximumNumColumns(1),
+                       [safeEditor](int choice)
+                       {
+                           if (safeEditor == nullptr || choice <= 0)
+                               return;
+                           auto& editor = *safeEditor;
+                           if (editor.processor.jumpToHistoryStep(choice - 1))
+                           {
+                               editor.signalFlow.repaint();
+                               editor.gatePreview.repaint();
+                               editor.detectorScope.repaint();
+                               editor.updateButtonStates();
+                               editor.updateDepthState();
+                               editor.updateAuditionState();
+                               editor.updateHistoryButtons();
+                           }
+                       });
+}
+
 void AeroGateAudioProcessorEditor::updateHistoryButtons()
 {
     setDefaultButton.setEnabled(!processor.defaultMatchesCurrent());
-    undoButton.setEnabled(processor.canUndo());
+    // Keep Undo clickable for its right-click menu even at the oldest state.
+    const bool canUndo = processor.canUndo();
+    undoButton.setEnabled(true);
+    undoButton.setColour(juce::TextButton::buttonColourId,
+        canUndo ? juce::Colours::white.withAlpha(0.50f)
+                : juce::Colour(0xffd5dce1).withAlpha(0.67f));
+    undoButton.setColour(juce::TextButton::textColourOffId,
+        canUndo ? juce::Colour(ink) : juce::Colour(0xff7d8993));
     redoButton.setEnabled(processor.canRedo());
 
     // Grey is deliberately visual only. The second click still works
