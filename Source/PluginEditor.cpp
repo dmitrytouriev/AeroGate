@@ -1593,6 +1593,19 @@ void AeroGateAudioProcessorEditor::updateHistoryButtons()
     setDefaultButton.setEnabled(!processor.defaultMatchesCurrent());
     undoButton.setEnabled(processor.canUndo());
     redoButton.setEnabled(processor.canRedo());
+
+    // Grey is deliberately visual only. The second click still works
+    // and makes factory settings the new instance-specific default.
+    const bool secondStage = processor.isFactoryResetArmed();
+    resetButton.setEnabled(true);
+    resetButton.setColour(juce::TextButton::buttonColourId,
+        secondStage ? juce::Colour(0xffd5dce1).withAlpha(0.67f)
+                    : juce::Colours::white.withAlpha(0.50f));
+    resetButton.setColour(juce::TextButton::textColourOffId,
+        secondStage ? juce::Colour(0xff7d8993) : juce::Colour(ink));
+    resetButton.setTooltip(secondStage
+        ? "Click again: restore factory settings and make them the instance default"
+        : "Reset to this instance's saved default");
 }
 
 void AeroGateAudioProcessorEditor::updateButtonStates()
