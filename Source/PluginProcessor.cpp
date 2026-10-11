@@ -96,7 +96,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout AeroGateAudioProcessor::crea
         juce::NormalisableRange<float>(-70.0f, 0.0f, 0.1f), -30.0f, makeDbAttributes()));
 
     layout.add(std::make_unique<juce::AudioParameterBool>(
-        PID { closeEnabledParamId, 1 }, "Close Enabled", true));
+        PID { closeEnabledParamId, 1 }, "Close Enabled", false));
 
     layout.add(std::make_unique<juce::AudioParameterFloat>(
         PID { lookaheadParamId, 1 }, "Lookahead",
