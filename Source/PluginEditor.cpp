@@ -47,6 +47,39 @@ float softWave(float x) noexcept
     return 0.5f + 0.5f * std::sin(x);
 }
 
+// The audio transient stays at a fixed screen position. Lookahead means the
+// *detector* begins the envelope before this delayed audio transient arrives,
+// so increasing Lookahead moves the whole envelope LEFT, not the hit right.
+// Use a shared layout for drawing and curve mouse hit-testing.
+struct EnvelopeTimeline
+{
+    float start = 0.0f;
+    float transient = 0.0f;
+    float attackEnd = 0.0f;
+    float holdEnd = 0.0f;
+    float releaseEnd = 0.0f;
+};
+
+EnvelopeTimeline makeEnvelopeTimeline(juce::Rectangle<float> chart,
+                                      float lookaheadMs, float attackMs,
+                                      float holdMs, float releaseMs) noexcept
+{
+    constexpr float maxLookaheadMs = 40.0f;
+    const float left = chart.getX() + 4.0f;
+    // Reserve the right end for the Depth slider, which overlays the plot.
+    const float right = chart.getRight() - juce::jmin(64.0f, chart.getWidth() * 0.14f);
+    const float transient = left + (right - left) * 0.38f;
+    const float postMs = juce::jmax(0.001f, attackMs + holdMs + releaseMs);
+    const float pxPerMs = juce::jmin(
+        (transient - left) / maxLookaheadMs,
+        (right - transient) / postMs);
+
+    const float start = transient - lookaheadMs * pxPerMs;
+    const float attackEnd = start + attackMs * pxPerMs;
+    const float holdEnd = attackEnd + holdMs * pxPerMs;
+    return { start, transient, attackEnd, holdEnd,
+             holdEnd + releaseMs * pxPerMs };
+}
 
 }
 
@@ -575,14 +608,14 @@ void GateEnvelopePreview::paint(juce::Graphics& g)
     const int attackShape = juce::jlimit(0, 2, juce::roundToInt(processor.getValueTreeState().getRawParameterValue(AeroGateAudioProcessor::attackCurveParamId)->load()));
     const int releaseShape = juce::jlimit(0, 2, juce::roundToInt(processor.getValueTreeState().getRawParameterValue(AeroGateAudioProcessor::releaseCurveParamId)->load()));
 
-    // All four sections use one time scale: equal milliseconds = equal widths.
-    const float totalMs = juce::jmax(0.001f, lookahead + attack + hold + release);
-    const float pxPerMs = chart.getWidth() / totalMs;
+    // Equal milliseconds share one scale on both sides of the fixed transient.
+    // Lookahead moves the envelope backwards relative to arriving audio.
+    const auto timeline = makeEnvelopeTimeline(chart, lookahead, attack, hold, release);
     const float x0 = chart.getX();
-    const float x1 = x0 + lookahead * pxPerMs;
-    const float x2 = x1 + attack * pxPerMs;
-    const float x3 = x2 + hold * pxPerMs;
-    const float x4 = chart.getRight();
+    const float x1 = timeline.start;
+    const float x2 = timeline.attackEnd;
+    const float x3 = timeline.holdEnd;
+    const float x4 = timeline.releaseEnd;
 
     const float topY = chart.getY() + 7.0f;
     const float bottomY = chart.getBottom() - 4.0f;
@@ -594,22 +627,23 @@ void GateEnvelopePreview::paint(juce::Graphics& g)
     const float idleY = ducking ? openY : closedY;
     const float activeY = ducking ? closedY : openY;
 
-    // Lookahead is a separate timeline region; never let its hatching bleed into Attack/Hold.
-    const juce::Rectangle<float> lookaheadArea(x0, chart.getY(),
-                                               juce::jmax(0.0f, x1 - x0), chart.getHeight());
+    // Highlight the time by which the detector leads the arriving audio.
+    // This may overlap Attack, Hold or Release: the audible transient is fixed.
+    const juce::Rectangle<float> lookaheadArea(x1, chart.getY(),
+        juce::jmax(0.0f, timeline.transient - x1), chart.getHeight());
     if (lookaheadArea.getWidth() > 0.0f)
     {
         g.saveState();
         g.reduceClipRegion(lookaheadArea.getSmallestIntegerContainer());
-        g.setColour(juce::Colour(0xff85a8bb).withAlpha(0.14f));
+        g.setColour(juce::Colour(0xff85a8bb).withAlpha(0.12f));
         g.fillRect(lookaheadArea);
-        g.setColour(juce::Colour(0xff85a8bb).withAlpha(0.32f));
-        for (float x = x0 - chart.getHeight(); x < x1; x += 8.0f)
+        g.setColour(juce::Colour(0xff85a8bb).withAlpha(0.25f));
+        for (float x = x1 - chart.getHeight(); x < timeline.transient; x += 8.0f)
             g.drawLine(x, chart.getBottom(), x + chart.getHeight(), chart.getY(), 0.8f);
         g.restoreState();
     }
 
-    g.setColour(juce::Colour(lineBlue).withAlpha(0.48f));
+    g.setColour(juce::Colour(lineBlue).withAlpha(0.38f));
     for (float x : { x1, x2, x3, x4 })
         g.drawVerticalLine(juce::roundToInt(x), chart.getY(), chart.getBottom());
 
@@ -641,6 +675,20 @@ void GateEnvelopePreview::paint(juce::Graphics& g)
     g.setColour(juce::Colour(accentStrong));
     g.strokePath(env, juce::PathStrokeType(2.0f, juce::PathStrokeType::curved,
                                            juce::PathStrokeType::rounded));
+
+    // Stationary arriving-audio marker. It does NOT travel when Lookahead
+    // changes; the detector-controlled envelope travels relative to it.
+    g.setColour(juce::Colour(aerosound::ui::meterOrange).withAlpha(0.90f));
+    g.drawVerticalLine(juce::roundToInt(timeline.transient),
+                       chart.getY(), chart.getBottom());
+    juce::Path impulse;
+    impulse.addTriangle(timeline.transient - 4.5f, chart.getY() + 1.0f,
+                        timeline.transient + 4.5f, chart.getY() + 1.0f,
+                        timeline.transient, chart.getY() + 9.0f);
+    g.fillPath(impulse);
+    g.setFont(uiFont(10.0f, juce::Font::bold));
+    g.drawText("HIT", juce::Rectangle<float>(timeline.transient - 19.0f,
+               chart.getY() - 17.0f, 38.0f, 15.0f), juce::Justification::centred);
 
     // Small white grab points help discover direct manipulation.
     const auto handle = [&](float xA, float xB, float yA, float yB, int shape, bool draggingThis)
@@ -691,15 +739,43 @@ void GateEnvelopePreview::mouseDown(const juce::MouseEvent& e)
     const float attack = state.getRawParameterValue(AeroGateAudioProcessor::attackParamId)->load();
     const float hold = state.getRawParameterValue(AeroGateAudioProcessor::holdParamId)->load();
     const float release = state.getRawParameterValue(AeroGateAudioProcessor::releaseParamId)->load();
-    const float scale = chart.getWidth() / juce::jmax(0.001f, ahead + attack + hold + release);
-    const float a = chart.getX() + ahead * scale;
-    const float b = a + attack * scale;
-    const float c = b + hold * scale;
-    const float d = chart.getRight();
-    const bool nearAttack = e.position.x >= a - 6.0f && e.position.x <= b + 6.0f;
-    const bool nearRelease = e.position.x >= c - 6.0f && e.position.x <= d + 6.0f;
+    const auto timeline = makeEnvelopeTimeline(chart, ahead, attack, hold, release);
+    const bool ducking = state.getRawParameterValue(
+        AeroGateAudioProcessor::modeParamId)->load() >= 0.5f;
+    const bool depthInf = state.getRawParameterValue(
+        AeroGateAudioProcessor::depthInfParamId)->load() >= 0.5f;
+    const float depth = state.getRawParameterValue(AeroGateAudioProcessor::depthParamId)->load();
+    const float top = chart.getY() + 7.0f;
+    const float bottom = chart.getBottom() - 4.0f;
+    const float depthNorm = depthInf ? 0.0f
+        : juce::jlimit(0.0f, 1.0f, (depth + 80.0f) / 80.0f);
+    const float closed = depthInf ? bottom : bottom - depthNorm * (bottom - top);
+    const float idle = ducking ? top : closed;
+    const float active = ducking ? closed : top;
+    const int attackShape = juce::jlimit(0, 2, juce::roundToInt(
+        state.getRawParameterValue(AeroGateAudioProcessor::attackCurveParamId)->load()));
+    const int releaseShape = juce::jlimit(0, 2, juce::roundToInt(
+        state.getRawParameterValue(AeroGateAudioProcessor::releaseCurveParamId)->load()));
+
+    // Any point ALONG the drawn curve is draggable. Do not activate a curve
+    // when clicking empty space in its horizontal range.
+    const auto nearCurve = [&](float fromX, float toX, float fromY, float toY, int shape)
+    {
+        if (toX <= fromX || e.position.x < fromX - 9.0f || e.position.x > toX + 9.0f)
+            return false;
+        const float fraction = juce::jlimit(0.0f, 1.0f,
+            (e.position.x - fromX) / (toX - fromX));
+        const float y = fromY + aerogate::envelope::easedProgress(fraction, shape)
+            * (toY - fromY);
+        return std::abs(e.position.y - y) <= 12.0f;
+    };
+    const bool nearAttack = nearCurve(timeline.start, timeline.attackEnd,
+                                      idle, active, attackShape);
+    const bool nearRelease = nearCurve(timeline.holdEnd, timeline.releaseEnd,
+                                       active, idle, releaseShape);
     if (nearAttack && (!nearRelease
-        || std::abs(e.position.x - (a + b) * 0.5f) < std::abs(e.position.x - (c + d) * 0.5f)))
+        || std::abs(e.position.x - (timeline.start + timeline.attackEnd) * 0.5f)
+            < std::abs(e.position.x - (timeline.holdEnd + timeline.releaseEnd) * 0.5f)))
         dragging = Segment::attack;
     else if (nearRelease)
         dragging = Segment::release;
