@@ -4,6 +4,7 @@
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <vector>
 
 // Shared between DSP and editor so the drawn and audible curves are identical.
 namespace aerogate::envelope
@@ -17,7 +18,8 @@ inline float easedProgress(float t, int shape) noexcept
 }
 }
 
-class AeroGateAudioProcessor final : public juce::AudioProcessor
+class AeroGateAudioProcessor final : public juce::AudioProcessor,
+                                      private juce::Timer
 {
 public:
     struct ScopeFrame
@@ -61,6 +63,19 @@ public:
 
     bool popScopeFrame(ScopeFrame&) noexcept;
 
+    // Per-instance, serializable parameter history; each user drag is one step.
+    void beginHistoryGesture();
+    void endHistoryGesture();
+    void captureHistoryStep();
+    bool undo();
+    bool redo();
+    bool canUndo() const;
+    bool canRedo() const;
+    void setAsDefault();
+    void resetToDefault();
+    bool defaultMatchesCurrent() const;
+    bool hasUserDefault() const;
+
     static constexpr const char* thresholdParamId = "threshold";
     static constexpr const char* closeParamId = "close";
     static constexpr const char* closeEnabledParamId = "closeEnabled";
@@ -83,6 +98,23 @@ public:
 
 private:
     static juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout();
+    void timerCallback() override;
+
+    static constexpr size_t snapshotParamCount = 19;
+    using ParameterSnapshot = std::array<float, snapshotParamCount>;
+    ParameterSnapshot readSnapshot() const noexcept;
+    void applySnapshot(const ParameterSnapshot&);
+    static bool snapshotsEqual(const ParameterSnapshot&, const ParameterSnapshot&) noexcept;
+    juce::ValueTree serializeHistory() const;
+    void loadHistory(const juce::ValueTree&);
+
+    mutable juce::CriticalSection historyLock;
+    std::vector<ParameterSnapshot> history;
+    ParameterSnapshot userDefault {};
+    size_t historyIndex = 0;
+    int historyGestureDepth = 0;
+    bool customDefault = false;
+    bool applyingSnapshot = false;
 
     void resetDsp();
     void updateFilterCutoffs();
