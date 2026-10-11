@@ -1800,11 +1800,11 @@ void AeroGateAudioProcessorEditor::timerCallback()
     }
 
     if (gotFrame)
-    {
-        gatePreview.repaint();
         signalFlow.repaint();
-    }
 
+    // Lookahead and envelope automation must update the drawing even while
+    // the DAW transport is stopped (when no scope frames are available).
+    gatePreview.repaint();
     signalFlow.syncCloseState();
 
     // Frequency response changes with both cutoffs and slope automation.
