@@ -14,6 +14,7 @@ public:
     void paint(juce::Graphics&) override;
     void mouseDown(const juce::MouseEvent&) override;
     void mouseDrag(const juce::MouseEvent&) override;
+    void mouseUp(const juce::MouseEvent&) override;
     void mouseDoubleClick(const juce::MouseEvent&) override;
     void pushFrame(const AeroGateAudioProcessor::ScopeFrame&);
     void syncCloseState();
@@ -120,7 +121,7 @@ private:
     void refreshUnitLabels();
     void setParameterValue(const char* id, float value);
     void resetDefaults();
-    void applyPreset(int index);
+    void updateHistoryButtons();
     void updateButtonStates();
     void updateDepthState();
     void updateAuditionState();
@@ -136,13 +137,13 @@ private:
     GateEnvelopePreview gatePreview;
     DetectorScope detectorScope;
 
-    juce::Slider lookaheadSlider;
-    juce::Slider attackSlider;
-    juce::Slider holdSlider;
-    juce::Slider releaseSlider;
+    aerosound::ui::CurveAwareKnob lookaheadSlider;
+    aerosound::ui::CurveAwareKnob attackSlider;
+    aerosound::ui::CurveAwareKnob holdSlider;
+    aerosound::ui::CurveAwareKnob releaseSlider;
     aerosound::ui::DepthSlider depthSlider;
-    juce::Slider hpfSlider;
-    juce::Slider lpfSlider;
+    aerosound::ui::CurveAwareKnob hpfSlider;
+    aerosound::ui::CurveAwareKnob lpfSlider;
     juce::ComboBox hpfSlopeBox;
     juce::ComboBox lpfSlopeBox;
     juce::Label lookaheadUnit;
@@ -160,9 +161,9 @@ private:
 
     aerosound::ui::HeadphoneButton audibleButton { "Audible" };
 
-    juce::ComboBox presetBox;
-    juce::TextButton presetPrev { "<" };
-    juce::TextButton presetNext { ">" };
+    juce::TextButton setDefaultButton { "Set as Default" };
+    juce::TextButton undoButton { "Undo" };
+    juce::TextButton redoButton { "Redo" };
     juce::TextButton resetButton { "Reset" };
     juce::TextButton helpButton { "Help" };
     juce::TextButton bypassButton { "Bypass" };
