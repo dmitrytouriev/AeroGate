@@ -491,22 +491,24 @@ void SignalFlowComponent::mouseDrag(const juce::MouseEvent& e)
         const bool enabled = processor.getValueTreeState().getRawParameterValue(
             AeroGateAudioProcessor::closeEnabledParamId)->load() >= 0.5f;
 
-        // Threshold moves independently toward Close, so reaching it actually
-        // removes the hysteresis instead of dragging Close along forever.
-        if (enabled && newThreshold <= closeValue.getValue() + 0.05)
+        // THRESHOLD and CLOSE form a linked pair: moving THRESHOLD keeps
+        // their dB difference (subject to the -70 dB CLOSE lower limit).
+        // Dragging CLOSE itself is how the user changes the hysteresis and
+        // can switch CLOSE off by making the two levels equal.
+        const double gap = enabled ? thresholdCloseGap : lastUsableCloseGap;
+        const double newClose = juce::jlimit(-70.0, newThreshold,
+                                             newThreshold - gap);
+        // Move CLOSE first when raising the threshold, and THRESHOLD first
+        // when lowering it, so their ordering holds even during callbacks.
+        if (newThreshold >= thresholdValue.getValue())
         {
-            lastUsableCloseGap = juce::jmax(0.5, thresholdCloseGap);
-            setCloseEnabled(false);
+            closeValue.setValue(newClose, juce::sendNotificationSync);
             thresholdValue.setValue(newThreshold, juce::sendNotificationSync);
-            closeValue.setValue(juce::jmax(-70.0, newThreshold - lastUsableCloseGap),
-                                juce::sendNotificationSync);
         }
         else
         {
             thresholdValue.setValue(newThreshold, juce::sendNotificationSync);
-            if (!enabled)
-                closeValue.setValue(juce::jmax(-70.0, newThreshold - lastUsableCloseGap),
-                                    juce::sendNotificationSync);
+            closeValue.setValue(newClose, juce::sendNotificationSync);
         }
     }
     else if (dragTarget == DragTarget::close)
