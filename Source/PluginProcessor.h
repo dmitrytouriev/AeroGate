@@ -76,6 +76,9 @@ public:
     bool defaultMatchesCurrent() const;
     bool hasUserDefault() const;
     bool isFactoryResetArmed() const;
+    juce::StringArray getHistoryLabels() const;
+    int getHistoryPosition() const;
+    bool jumpToHistoryStep(int index);
 
     static constexpr const char* thresholdParamId = "threshold";
     static constexpr const char* closeParamId = "close";
@@ -106,11 +109,15 @@ private:
     ParameterSnapshot readSnapshot() const noexcept;
     void applySnapshot(const ParameterSnapshot&);
     static bool snapshotsEqual(const ParameterSnapshot&, const ParameterSnapshot&) noexcept;
+    static juce::String describeHistoryChange(const ParameterSnapshot& previous,
+                                               const ParameterSnapshot& current);
     juce::ValueTree serializeHistory() const;
     void loadHistory(const juce::ValueTree&);
 
     mutable juce::CriticalSection historyLock;
     std::vector<ParameterSnapshot> history;
+    std::vector<juce::String> historyLabels;
+    juce::String nextHistoryLabel;
     ParameterSnapshot userDefault {};
     ParameterSnapshot factoryDefaults {};
     size_t historyIndex = 0;
