@@ -216,6 +216,31 @@ public:
 // The rotary wheel should accept clicks only on the rendered dial (or its
 // numeric text field). Transparent corners pass straight through to the
 // envelope/spectrum graph beneath it instead of turning a hidden knob.
+// Left click performs Undo, right click opens the complete history.
+class HistoryUndoButton final : public juce::TextButton
+{
+public:
+    using juce::TextButton::TextButton;
+    std::function<void()> onHistoryMenu;
+
+    void mouseDown(const juce::MouseEvent& event) override
+    {
+        if (event.mods.isPopupMenu())
+        {
+            if (onHistoryMenu)
+                onHistoryMenu();
+            return;
+        }
+        juce::TextButton::mouseDown(event);
+    }
+
+    void mouseUp(const juce::MouseEvent& event) override
+    {
+        if (!event.mods.isPopupMenu())
+            juce::TextButton::mouseUp(event);
+    }
+};
+
 class CurveAwareKnob final : public juce::Slider
 {
 public:
