@@ -5,6 +5,27 @@
 
 namespace
 {
+constexpr std::array<const char*, 19> historyParamIds {
+    AeroGateAudioProcessor::thresholdParamId,
+    AeroGateAudioProcessor::closeParamId,
+    AeroGateAudioProcessor::closeEnabledParamId,
+    AeroGateAudioProcessor::lookaheadParamId,
+    AeroGateAudioProcessor::attackParamId,
+    AeroGateAudioProcessor::holdParamId,
+    AeroGateAudioProcessor::releaseParamId,
+    AeroGateAudioProcessor::attackCurveParamId,
+    AeroGateAudioProcessor::releaseCurveParamId,
+    AeroGateAudioProcessor::depthParamId,
+    AeroGateAudioProcessor::depthInfParamId,
+    AeroGateAudioProcessor::hpfParamId,
+    AeroGateAudioProcessor::lpfParamId,
+    AeroGateAudioProcessor::hpfSlopeParamId,
+    AeroGateAudioProcessor::lpfSlopeParamId,
+    AeroGateAudioProcessor::modeParamId,
+    AeroGateAudioProcessor::externalSidechainParamId,
+    AeroGateAudioProcessor::audibleParamId,
+    AeroGateAudioProcessor::bypassParamId
+};
 juce::NormalisableRange<float> makeSkewedRange(float min, float max, float centre)
 {
     juce::NormalisableRange<float> r(min, max);
@@ -54,6 +75,9 @@ AeroGateAudioProcessor::AeroGateAudioProcessor()
                          .withInput("Sidechain", juce::AudioChannelSet::stereo(), false)),
       parameters(*this, nullptr, "PARAMETERS", createParameterLayout())
 {
+    userDefault = readSnapshot();
+    history.push_back(userDefault);
+    startTimerHz(20); // Tracks automation even when the editor is closed.
 }
 
 juce::AudioProcessorValueTreeState::ParameterLayout AeroGateAudioProcessor::createParameterLayout()
@@ -611,17 +635,258 @@ juce::AudioProcessorParameter* AeroGateAudioProcessor::getBypassParameter() cons
     return const_cast<juce::AudioProcessorValueTreeState&>(parameters).getParameter(bypassParamId);
 }
 
+
+AeroGateAudioProcessor::ParameterSnapshot AeroGateAudioProcessor::readSnapshot() const noexcept
+{
+    ParameterSnapshot values {};
+    for (size_t i = 0; i < values.size(); ++i)
+        if (const auto* value = parameters.getRawParameterValue(historyParamIds[i]))
+            values[i] = value->load();
+    return values;
+}
+
+bool AeroGateAudioProcessor::snapshotsEqual(const ParameterSnapshot& a,
+                                             const ParameterSnapshot& b) noexcept
+{
+    for (size_t i = 0; i < a.size(); ++i)
+        if (std::abs(a[i] - b[i]) > 0.0002f)
+            return false;
+    return true;
+}
+
+void AeroGateAudioProcessor::captureHistoryStep()
+{
+    const auto now = readSnapshot();
+    const juce::ScopedLock lock(historyLock);
+    if (applyingSnapshot || historyGestureDepth > 0)
+        return;
+
+    if (history.empty())
+    {
+        history.push_back(now);
+        historyIndex = 0;
+        return;
+    }
+    if (snapshotsEqual(history[historyIndex], now))
+        return;
+
+    // Creating an edit after Undo invalidates the Redo branch.
+    history.erase(history.begin() + static_cast<std::ptrdiff_t>(historyIndex + 1), history.end());
+    history.push_back(now);
+    if (history.size() > 201) // baseline + 200 reversible edits
+        history.erase(history.begin());
+    historyIndex = history.size() - 1;
+}
+
+void AeroGateAudioProcessor::timerCallback()
+{
+    captureHistoryStep();
+}
+
+void AeroGateAudioProcessor::beginHistoryGesture()
+{
+    captureHistoryStep();
+    const juce::ScopedLock lock(historyLock);
+    ++historyGestureDepth;
+}
+
+void AeroGateAudioProcessor::endHistoryGesture()
+{
+    {
+        const juce::ScopedLock lock(historyLock);
+        historyGestureDepth = juce::jmax(0, historyGestureDepth - 1);
+    }
+    captureHistoryStep();
+}
+
+void AeroGateAudioProcessor::applySnapshot(const ParameterSnapshot& values)
+{
+    {
+        const juce::ScopedLock lock(historyLock);
+        applyingSnapshot = true;
+    }
+
+    for (size_t i = 0; i < values.size(); ++i)
+    {
+        if (auto* param = parameters.getParameter(historyParamIds[i]))
+        {
+            if (const auto* oldValue = parameters.getRawParameterValue(historyParamIds[i]))
+            {
+                if (std::abs(oldValue->load() - values[i]) <= 0.0002f)
+                    continue;
+            }
+            param->beginChangeGesture();
+            param->setValueNotifyingHost(param->convertTo0to1(values[i]));
+            param->endChangeGesture();
+        }
+    }
+
+    const juce::ScopedLock lock(historyLock);
+    applyingSnapshot = false;
+}
+
+bool AeroGateAudioProcessor::undo()
+{
+    captureHistoryStep();
+    ParameterSnapshot target {};
+    {
+        const juce::ScopedLock lock(historyLock);
+        if (historyIndex == 0 || history.empty())
+            return false;
+        target = history[--historyIndex];
+    }
+    applySnapshot(target);
+    return true;
+}
+
+bool AeroGateAudioProcessor::redo()
+{
+    captureHistoryStep();
+    ParameterSnapshot target {};
+    {
+        const juce::ScopedLock lock(historyLock);
+        if (history.empty() || historyIndex + 1 >= history.size())
+            return false;
+        target = history[++historyIndex];
+    }
+    applySnapshot(target);
+    return true;
+}
+
+bool AeroGateAudioProcessor::canUndo() const
+{
+    const juce::ScopedLock lock(historyLock);
+    return historyIndex > 0;
+}
+
+bool AeroGateAudioProcessor::canRedo() const
+{
+    const juce::ScopedLock lock(historyLock);
+    return historyIndex + 1 < history.size();
+}
+
+void AeroGateAudioProcessor::setAsDefault()
+{
+    captureHistoryStep();
+    const auto now = readSnapshot();
+    const juce::ScopedLock lock(historyLock);
+    userDefault = now;
+    customDefault = true;
+}
+
+bool AeroGateAudioProcessor::hasUserDefault() const
+{
+    const juce::ScopedLock lock(historyLock);
+    return customDefault;
+}
+
+bool AeroGateAudioProcessor::defaultMatchesCurrent() const
+{
+    const auto now = readSnapshot();
+    const juce::ScopedLock lock(historyLock);
+    return customDefault && snapshotsEqual(now, userDefault);
+}
+
+void AeroGateAudioProcessor::resetToDefault()
+{
+    ParameterSnapshot target {};
+    {
+        const juce::ScopedLock lock(historyLock);
+        target = userDefault;
+    }
+    beginHistoryGesture();
+    applySnapshot(target);
+    endHistoryGesture();
+}
+
+juce::ValueTree AeroGateAudioProcessor::serializeHistory() const
+{
+    juce::ValueTree root("AEROGATE_USER_HISTORY");
+    const juce::ScopedLock lock(historyLock);
+    root.setProperty("version", 1, nullptr);
+    root.setProperty("index", static_cast<int>(historyIndex), nullptr);
+    root.setProperty("customDefault", customDefault, nullptr);
+
+    auto writeStep = [](const char* kind, const ParameterSnapshot& values)
+    {
+        juce::ValueTree step(kind);
+        for (size_t i = 0; i < values.size(); ++i)
+            step.setProperty(historyParamIds[i], values[i], nullptr);
+        return step;
+    };
+    root.addChild(writeStep("USER_DEFAULT", userDefault), -1, nullptr);
+    for (const auto& step : history)
+        root.addChild(writeStep("STEP", step), -1, nullptr);
+    return root;
+}
+
+void AeroGateAudioProcessor::loadHistory(const juce::ValueTree& saved)
+{
+    const auto now = readSnapshot();
+    const juce::ScopedLock lock(historyLock);
+    history.clear();
+    historyIndex = 0;
+    historyGestureDepth = 0;
+    applyingSnapshot = false;
+    userDefault = now;
+    customDefault = false;
+
+    if (saved.isValid() && static_cast<int>(saved.getProperty("version", 0)) == 1)
+    {
+        if (const auto def = saved.getChildWithName("USER_DEFAULT"); def.isValid())
+        {
+            for (size_t i = 0; i < userDefault.size(); ++i)
+                userDefault[i] = static_cast<float>(def.getProperty(historyParamIds[i], now[i]));
+            customDefault = static_cast<bool>(saved.getProperty("customDefault", false));
+        }
+
+        for (int i = 0; i < saved.getNumChildren(); ++i)
+        {
+            const auto step = saved.getChild(i);
+            if (!step.hasType("STEP"))
+                continue;
+            ParameterSnapshot values {};
+            for (size_t p = 0; p < values.size(); ++p)
+                values[p] = static_cast<float>(step.getProperty(historyParamIds[p], now[p]));
+            history.push_back(values);
+        }
+        if (history.size() > 201)
+            history.erase(history.begin(), history.end() - 201);
+        if (!history.empty())
+        {
+            historyIndex = static_cast<size_t>(juce::jlimit(
+                0, static_cast<int>(history.size() - 1),
+                static_cast<int>(saved.getProperty("index", static_cast<int>(history.size() - 1)))));
+            // The DAW's live parameter state takes precedence over a stale step.
+            history[historyIndex] = now;
+        }
+    }
+    if (history.empty())
+        history.push_back(now);
+}
+
 void AeroGateAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
-    if (auto xml = parameters.copyState().createXml())
+    captureHistoryStep();
+    auto state = parameters.copyState();
+    state.addChild(serializeHistory(), -1, nullptr);
+    if (auto xml = state.createXml())
         copyXmlToBinary(*xml, destData);
 }
 
 void AeroGateAudioProcessor::setStateInformation(const void* data, int sizeInBytes)
 {
     if (auto xml = getXmlFromBinary(data, sizeInBytes))
-        if (xml->hasTagName(parameters.state.getType()))
-            parameters.replaceState(juce::ValueTree::fromXml(*xml));
+    {
+        if (!xml->hasTagName(parameters.state.getType()))
+            return;
+        auto state = juce::ValueTree::fromXml(*xml);
+        const auto saved = state.getChildWithName("AEROGATE_USER_HISTORY").createCopy();
+        if (auto extra = state.getChildWithName("AEROGATE_USER_HISTORY"); extra.isValid())
+            state.removeChild(extra, nullptr);
+        parameters.replaceState(state);
+        loadHistory(saved);
+    }
 }
 
 juce::AudioProcessorEditor* AeroGateAudioProcessor::createEditor()
