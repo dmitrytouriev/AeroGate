@@ -1305,7 +1305,7 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
 
     for (auto* button : { &gateButton, &duckButton, &internalButton, &externalButton,
                           static_cast<juce::TextButton*>(&depthInfButton),
-                          &setDefaultButton, &undoButton, &redoButton,
+                          &setDefaultButton, static_cast<juce::TextButton*>(&undoButton), &redoButton,
                           &resetButton, &helpButton, &bypassButton, &donateButton })
     {
         setupSmallButton(*button);
