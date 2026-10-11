@@ -78,6 +78,7 @@ AeroGateAudioProcessor::AeroGateAudioProcessor()
     factoryDefaults = readSnapshot();
     userDefault = factoryDefaults;
     history.push_back(userDefault);
+    historyLabels.push_back("Initial state");
     startTimerHz(20); // Tracks automation even when the editor is closed.
 }
 
@@ -655,6 +656,64 @@ bool AeroGateAudioProcessor::snapshotsEqual(const ParameterSnapshot& a,
     return true;
 }
 
+juce::String AeroGateAudioProcessor::describeHistoryChange(
+    const ParameterSnapshot& previous, const ParameterSnapshot& current)
+{
+    constexpr std::array<const char*, 19> names {
+        "Threshold", "Close", "Close Enabled", "Lookahead", "Attack",
+        "Hold", "Release", "Attack Curve", "Release Curve", "Depth",
+        "Depth Infinity", "HPF", "LPF", "HPF Slope", "LPF Slope",
+        "Mode", "Sidechain", "Audible", "Bypass"
+    };
+
+    auto formatValue = [](size_t i, float value) -> juce::String
+    {
+        const int rounded = juce::roundToInt(value);
+        if (i == 7 || i == 8)
+        {
+            constexpr const char* shapes[] { "Fast", "Linear", "Slow" };
+            return shapes[juce::jlimit(0, 2, rounded)];
+        }
+        if (i == 13 || i == 14)
+        {
+            constexpr const char* slopes[] { "12", "18", "24", "36", "48", "96" };
+            return juce::String(slopes[juce::jlimit(0, 5, rounded)]) + " dB/oct";
+        }
+        if (i == 15) return rounded == 0 ? "Normal" : "Ducking";
+        if (i == 16) return rounded == 0 ? "Internal" : "External";
+        if (i == 2 || i == 10 || i == 17 || i == 18)
+            return rounded == 0 ? "Off" : "On";
+        if (i == 11 || i == 12)
+            return value >= 1000.0f
+                ? juce::String(value / 1000.0f, 1) + " kHz"
+                : juce::String(value, 1) + " Hz";
+        if (i >= 3 && i <= 6)
+            return juce::String(value, 1) + " ms";
+        return juce::String(value, 1) + " dB";
+    };
+
+    juce::StringArray changes;
+    for (size_t i = 0; i < current.size(); ++i)
+    {
+        if (std::abs(previous[i] - current[i]) <= 0.0002f)
+            continue;
+        changes.add(juce::String(names[i]) + ": "
+            + formatValue(i, previous[i]) + " -> " + formatValue(i, current[i]));
+    }
+    if (changes.isEmpty()) return "No change";
+    if (changes.size() == 1) return changes[0];
+    if (changes.size() == 2)
+    {
+        // Threshold + Close normally move together as one meaningful gesture.
+        if (std::abs(previous[0] - current[0]) > 0.0002f
+            && std::abs(previous[1] - current[1]) > 0.0002f)
+            return "Threshold + Close";
+        return juce::String("2 parameters: ") + changes[0].upToFirstOccurrenceOf(":", false, false)
+               + ", " + changes[1].upToFirstOccurrenceOf(":", false, false);
+    }
+    return "Multiple parameters (" + juce::String(changes.size()) + ")";
+}
+
 void AeroGateAudioProcessor::captureHistoryStep()
 {
     const auto now = readSnapshot();
@@ -665,18 +724,32 @@ void AeroGateAudioProcessor::captureHistoryStep()
     if (history.empty())
     {
         history.push_back(now);
+        historyLabels.push_back("Initial state");
         historyIndex = 0;
+        nextHistoryLabel.clear();
         return;
     }
     if (snapshotsEqual(history[historyIndex], now))
+    {
+        nextHistoryLabel.clear();
         return;
+    }
 
     factoryResetArmed = false;
+    const auto label = nextHistoryLabel.isNotEmpty()
+        ? nextHistoryLabel : describeHistoryChange(history[historyIndex], now);
+    nextHistoryLabel.clear();
     // Creating an edit after Undo invalidates the Redo branch.
-    history.erase(history.begin() + static_cast<std::ptrdiff_t>(historyIndex + 1), history.end());
+    const auto eraseFrom = static_cast<std::ptrdiff_t>(historyIndex + 1);
+    history.erase(history.begin() + eraseFrom, history.end());
+    historyLabels.erase(historyLabels.begin() + eraseFrom, historyLabels.end());
     history.push_back(now);
+    historyLabels.push_back(label);
     if (history.size() > 201) // baseline + 200 reversible edits
+    {
         history.erase(history.begin());
+        historyLabels.erase(historyLabels.begin());
+    }
     historyIndex = history.size() - 1;
 }
 
@@ -763,6 +836,41 @@ bool AeroGateAudioProcessor::redo()
     return true;
 }
 
+juce::StringArray AeroGateAudioProcessor::getHistoryLabels() const
+{
+    const juce::ScopedLock lock(historyLock);
+    juce::StringArray result;
+    for (const auto& label : historyLabels)
+        result.add(label);
+    return result;
+}
+
+int AeroGateAudioProcessor::getHistoryPosition() const
+{
+    const juce::ScopedLock lock(historyLock);
+    return static_cast<int>(historyIndex);
+}
+
+bool AeroGateAudioProcessor::jumpToHistoryStep(int index)
+{
+    captureHistoryStep();
+    ParameterSnapshot target {};
+    {
+        const juce::ScopedLock lock(historyLock);
+        if (index < 0 || index >= static_cast<int>(history.size())
+            || static_cast<size_t>(index) == historyIndex)
+            return false;
+        historyIndex = static_cast<size_t>(index);
+        target = history[historyIndex];
+    }
+    applySnapshot(target);
+    {
+        const juce::ScopedLock lock(historyLock);
+        factoryResetArmed = false;
+    }
+    return true;
+}
+
 bool AeroGateAudioProcessor::canUndo() const
 {
     const juce::ScopedLock lock(historyLock);
@@ -821,6 +929,10 @@ void AeroGateAudioProcessor::resetToDefault()
 
     // Each Reset operation is a single history step, independently undoable.
     beginHistoryGesture();
+    {
+        const juce::ScopedLock lock(historyLock);
+        nextHistoryLabel = factoryReset ? "Reset to Factory" : "Reset to Default";
+    }
     applySnapshot(target);
     endHistoryGesture();
 
@@ -859,8 +971,12 @@ juce::ValueTree AeroGateAudioProcessor::serializeHistory() const
         return step;
     };
     root.addChild(writeStep("USER_DEFAULT", userDefault), -1, nullptr);
-    for (const auto& step : history)
-        root.addChild(writeStep("STEP", step), -1, nullptr);
+    for (size_t i = 0; i < history.size(); ++i)
+    {
+        auto step = writeStep("STEP", history[i]);
+        step.setProperty("label", historyLabels[i], nullptr);
+        root.addChild(step, -1, nullptr);
+    }
     return root;
 }
 
@@ -869,6 +985,8 @@ void AeroGateAudioProcessor::loadHistory(const juce::ValueTree& saved)
     const auto now = readSnapshot();
     const juce::ScopedLock lock(historyLock);
     history.clear();
+    historyLabels.clear();
+    nextHistoryLabel.clear();
     historyIndex = 0;
     historyGestureDepth = 0;
     applyingSnapshot = false;
@@ -896,10 +1014,15 @@ void AeroGateAudioProcessor::loadHistory(const juce::ValueTree& saved)
             ParameterSnapshot values {};
             for (size_t p = 0; p < values.size(); ++p)
                 values[p] = static_cast<float>(step.getProperty(historyParamIds[p], now[p]));
+            historyLabels.push_back(step.getProperty("label").toString());
             history.push_back(values);
         }
         if (history.size() > 201)
-            history.erase(history.begin(), history.end() - 201);
+        {
+            const auto excess = static_cast<std::ptrdiff_t>(history.size() - 201);
+            history.erase(history.begin(), history.begin() + excess);
+            historyLabels.erase(historyLabels.begin(), historyLabels.begin() + excess);
+        }
         if (!history.empty())
         {
             historyIndex = static_cast<size_t>(juce::jlimit(
@@ -910,7 +1033,14 @@ void AeroGateAudioProcessor::loadHistory(const juce::ValueTree& saved)
         }
     }
     if (history.empty())
+    {
         history.push_back(now);
+        historyLabels.push_back("Initial state");
+    }
+    for (size_t i = 0; i < historyLabels.size(); ++i)
+        if (historyLabels[i].isEmpty())
+            historyLabels[i] = i == 0 ? "Initial state"
+                                     : describeHistoryChange(history[i - 1], history[i]);
 }
 
 void AeroGateAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
