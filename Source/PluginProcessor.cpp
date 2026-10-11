@@ -75,7 +75,8 @@ AeroGateAudioProcessor::AeroGateAudioProcessor()
                          .withInput("Sidechain", juce::AudioChannelSet::stereo(), false)),
       parameters(*this, nullptr, "PARAMETERS", createParameterLayout())
 {
-    userDefault = readSnapshot();
+    factoryDefaults = readSnapshot();
+    userDefault = factoryDefaults;
     history.push_back(userDefault);
     startTimerHz(20); // Tracks automation even when the editor is closed.
 }
@@ -828,7 +829,7 @@ void AeroGateAudioProcessor::loadHistory(const juce::ValueTree& saved)
     historyIndex = 0;
     historyGestureDepth = 0;
     applyingSnapshot = false;
-    userDefault = now;
+    userDefault = factoryDefaults;
     customDefault = false;
 
     if (saved.isValid() && static_cast<int>(saved.getProperty("version", 0)) == 1)
