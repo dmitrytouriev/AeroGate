@@ -47,30 +47,6 @@ float softWave(float x) noexcept
     return 0.5f + 0.5f * std::sin(x);
 }
 
-// Starting points for different sources. Each uses the same APVTS parameters
-// as the editor and DSP, so automation and project recall work normally.
-struct AeroGatePreset
-{
-    const char* name;
-    float threshold, close, lookahead, attack, hold, release, depth, hpf, lpf;
-    int attackCurve, releaseCurve;
-    bool ducking;
-};
-
-constexpr std::array<AeroGatePreset, 12> aeroGatePresets {{
-    { "Kick Tight",     -24, -30, 5, 0.7f,  45,  90, -70,  30, 1800, 1, 0, false },
-    { "Kick Natural",   -27, -33, 5, 2.0f,  70, 190, -35,  25, 2500, 1, 1, false },
-    { "Snare Tight",    -23, -29, 4, 0.6f,  60, 110, -60, 130, 8500, 0, 0, false },
-    { "Snare Natural",  -28, -34, 5, 1.5f,  90, 260, -35,  90, 9500, 1, 1, false },
-    { "Tom Tight",      -28, -34, 5, 1.5f,  85, 170, -65,  50, 4200, 0, 0, false },
-    { "Tom Natural",    -30, -36, 5, 2.5f, 120, 320, -30,  35, 1800, 1, 2, false },
-    { "Hi-Hat Cleanup",-29, -35, 2, 1.0f,  30,  70, -55, 500,14000, 1, 0, false },
-    { "Voice Clean",    -32, -38, 5, 4.0f, 130, 230, -28,  85,11500, 1, 2, false },
-    { "Voice Gentle",   -39, -45, 5, 9.0f, 220, 420, -16,  80,14000, 2, 2, false },
-    { "Guitar Chops",   -30, -36, 3, 1.0f,  35, 100, -65,  95, 8000, 1, 0, false },
-    { "Bass Tight",     -26, -32, 5, 2.0f,  95, 220, -50,  20, 1000, 1, 0, false },
-    { "Music Ducking",  -28, -34, 5, 6.0f,  50, 280, -16, 120,10000, 1, 2, true  }
-}};
 
 }
 
@@ -459,6 +435,7 @@ void SignalFlowComponent::mouseDown(const juce::MouseEvent& e)
 
     dragTarget = e.position.x >= centre.x ? DragTarget::threshold : DragTarget::close;
     dragStartY = e.position.y;
+    processor.beginHistoryGesture();
 
     if (dragTarget == DragTarget::threshold)
     {
@@ -539,6 +516,13 @@ void SignalFlowComponent::mouseDrag(const juce::MouseEvent& e)
     }
 
     repaint();
+}
+
+void SignalFlowComponent::mouseUp(const juce::MouseEvent&)
+{
+    if (dragTarget != DragTarget::none)
+        processor.endHistoryGesture();
+    dragTarget = DragTarget::none;
 }
 
 void SignalFlowComponent::mouseDoubleClick(const juce::MouseEvent&)
@@ -722,6 +706,7 @@ void GateEnvelopePreview::mouseDown(const juce::MouseEvent& e)
 
     if (dragging != Segment::none)
     {
+        processor.beginHistoryGesture();
         dragParameter = state.getParameter(dragging == Segment::attack
             ? AeroGateAudioProcessor::attackCurveParamId
             : AeroGateAudioProcessor::releaseCurveParamId);
@@ -772,6 +757,8 @@ void GateEnvelopePreview::mouseUp(const juce::MouseEvent&)
 {
     if (gestureStarted && dragParameter != nullptr)
         dragParameter->endChangeGesture();
+    if (dragging != Segment::none)
+        processor.endHistoryGesture();
     gestureStarted = false;
     dragParameter = nullptr;
     dragging = Segment::none;
@@ -1115,7 +1102,11 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
         &depthSlider, &hpfSlider, &lpfSlider
     };
     for (auto* slider : sliders)
+    {
+        slider->onDragStart = [this] { processor.beginHistoryGesture(); };
+        slider->onDragEnd = [this] { processor.endHistoryGesture(); };
         addAndMakeVisible(*slider);
+    }
 
     auto& state = processor.getValueTreeState();
     lookaheadAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
@@ -1230,8 +1221,9 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
         slider->updateText();
 
     for (auto* button : { &gateButton, &duckButton, &internalButton, &externalButton,
-                          static_cast<juce::TextButton*>(&depthInfButton), &resetButton, &helpButton, &bypassButton, &donateButton,
-                          &presetPrev, &presetNext })
+                          static_cast<juce::TextButton*>(&depthInfButton),
+                          &setDefaultButton, &undoButton, &redoButton,
+                          &resetButton, &helpButton, &bypassButton, &donateButton })
     {
         setupSmallButton(*button);
         addAndMakeVisible(*button);
@@ -1261,31 +1253,33 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
     };
 
 
-    presetBox.addItem("Default", 1);
-    for (size_t i = 0; i < aeroGatePresets.size(); ++i)
-        presetBox.addItem(aeroGatePresets[i].name, static_cast<int>(i) + 2);
-    // Do not imply a preset was applied when a new instance is opened.
-    presetBox.setSelectedId(1, juce::dontSendNotification);
-    presetBox.onChange = [this]
+    setDefaultButton.setTooltip("Use current settings as this instance's Reset defaults");
+    setDefaultButton.onClick = [this]
     {
-        applyPreset(presetBox.getSelectedItemIndex());
+        processor.setAsDefault();
+        updateHistoryButtons();
     };
-    addAndMakeVisible(presetBox);
-
-    presetPrev.onClick = [this]
+    undoButton.setTooltip("Undo last parameter change");
+    redoButton.setTooltip("Redo last undone change");
+    undoButton.onClick = [this]
     {
-        const int count = presetBox.getNumItems();
-        if (count <= 0) return;
-        const int next = (presetBox.getSelectedItemIndex() - 1 + count) % count;
-        presetBox.setSelectedItemIndex(next, juce::sendNotification);
+        if (processor.undo())
+        {
+            signalFlow.repaint();
+            gatePreview.repaint();
+            detectorScope.repaint();
+            updateHistoryButtons();
+        }
     };
-
-    presetNext.onClick = [this]
+    redoButton.onClick = [this]
     {
-        const int count = presetBox.getNumItems();
-        if (count <= 0) return;
-        const int next = (presetBox.getSelectedItemIndex() + 1) % count;
-        presetBox.setSelectedItemIndex(next, juce::sendNotification);
+        if (processor.redo())
+        {
+            signalFlow.repaint();
+            gatePreview.repaint();
+            detectorScope.repaint();
+            updateHistoryButtons();
+        }
     };
 
     resetButton.onClick = [this] { resetDefaults(); };
@@ -1346,6 +1340,7 @@ AeroGateAudioProcessorEditor::AeroGateAudioProcessorEditor(AeroGateAudioProcesso
     updateButtonStates();
     updateDepthState();
     updateAuditionState();
+    updateHistoryButtons();
 
     startTimerHz(30);
 }
@@ -1498,7 +1493,7 @@ void AeroGateAudioProcessorEditor::paint(juce::Graphics& g)
     g.drawText("DETECTOR", rect(648, 418, 106, 28), juce::Justification::centredLeft);
 
     g.setFont(uiFont(14.0f * s, juce::Font::bold));
-    g.drawText("PRESET", rect(48, 710, 72, 28), juce::Justification::centredLeft);
+    // Per-instance defaults and Undo/Redo replace the old preset bar.
 
     g.setColour(juce::Colour(lineBlue).withAlpha(0.48f));
     g.drawLine(44.0f * sx, 448.0f * sy, 602.0f * sx, 448.0f * sy, 1.0f * s);
@@ -1552,9 +1547,9 @@ void AeroGateAudioProcessorEditor::resized()
     set(lpfSlopeBox, 944, 654, 108, 26);
     set(detectorScope, 646, 455, 410, 220);
 
-    set(presetBox, 122, 711, 200, 28);
-    set(presetPrev, 330, 711, 42, 28);
-    set(presetNext, 378, 711, 42, 28);
+    set(setDefaultButton, 48, 711, 151, 28);
+    set(undoButton, 207, 711, 68, 28);
+    set(redoButton, 283, 711, 68, 28);
 
     set(resetButton, 720, 711, 78, 28);
     set(helpButton, 806, 711, 78, 28);
@@ -1583,55 +1578,21 @@ void AeroGateAudioProcessorEditor::setParameterValue(const char* id, float value
 
 void AeroGateAudioProcessorEditor::resetDefaults()
 {
-    setParameterValue(AeroGateAudioProcessor::thresholdParamId, -24.0f);
-    setParameterValue(AeroGateAudioProcessor::closeParamId, -30.0f);
-    setParameterValue(AeroGateAudioProcessor::closeEnabledParamId, 1.0f);
-    setParameterValue(AeroGateAudioProcessor::lookaheadParamId, 5.0f);
-    setParameterValue(AeroGateAudioProcessor::attackParamId, 2.0f);
-    setParameterValue(AeroGateAudioProcessor::holdParamId, 50.0f);
-    setParameterValue(AeroGateAudioProcessor::releaseParamId, 120.0f);
-    setParameterValue(AeroGateAudioProcessor::attackCurveParamId, 1.0f); // Linear
-    setParameterValue(AeroGateAudioProcessor::releaseCurveParamId, 0.0f); // Fast
-    setParameterValue(AeroGateAudioProcessor::depthParamId, -40.0f);
-    setParameterValue(AeroGateAudioProcessor::depthInfParamId, 0.0f);
-    setParameterValue(AeroGateAudioProcessor::hpfParamId, 20.0f);
-    setParameterValue(AeroGateAudioProcessor::lpfParamId, 20000.0f);
-    setParameterValue(AeroGateAudioProcessor::hpfSlopeParamId, 5.0f);
-    setParameterValue(AeroGateAudioProcessor::lpfSlopeParamId, 5.0f);
-    setParameterValue(AeroGateAudioProcessor::modeParamId, 0.0f);
-    setParameterValue(AeroGateAudioProcessor::externalSidechainParamId, 0.0f);
-    setParameterValue(AeroGateAudioProcessor::audibleParamId, 0.0f);
-    if (presetBox.getNumItems() > 0)
-        presetBox.setSelectedId(1, juce::dontSendNotification);
+    processor.resetToDefault();
     updateButtonStates();
     updateDepthState();
     updateAuditionState();
+    signalFlow.repaint();
+    gatePreview.repaint();
+    detectorScope.repaint();
+    updateHistoryButtons();
 }
 
-void AeroGateAudioProcessorEditor::applyPreset(int index)
+void AeroGateAudioProcessorEditor::updateHistoryButtons()
 {
-    resetDefaults();
-    if (index <= 0 || index > static_cast<int>(aeroGatePresets.size()))
-        return;
-
-    const auto& p = aeroGatePresets[static_cast<size_t>(index - 1)];
-    setParameterValue(AeroGateAudioProcessor::thresholdParamId, p.threshold);
-    setParameterValue(AeroGateAudioProcessor::closeParamId, p.close);
-    setParameterValue(AeroGateAudioProcessor::lookaheadParamId, p.lookahead);
-    setParameterValue(AeroGateAudioProcessor::attackParamId, p.attack);
-    setParameterValue(AeroGateAudioProcessor::holdParamId, p.hold);
-    setParameterValue(AeroGateAudioProcessor::releaseParamId, p.release);
-    setParameterValue(AeroGateAudioProcessor::depthParamId, p.depth);
-    setParameterValue(AeroGateAudioProcessor::hpfParamId, p.hpf);
-    setParameterValue(AeroGateAudioProcessor::lpfParamId, p.lpf);
-    setParameterValue(AeroGateAudioProcessor::attackCurveParamId, static_cast<float>(p.attackCurve));
-    setParameterValue(AeroGateAudioProcessor::releaseCurveParamId, static_cast<float>(p.releaseCurve));
-    setParameterValue(AeroGateAudioProcessor::modeParamId, p.ducking ? 1.0f : 0.0f);
-
-    presetBox.setSelectedId(index + 1, juce::dontSendNotification);
-    updateButtonStates();
-    updateDepthState();
-    gatePreview.repaint();
+    setDefaultButton.setEnabled(!processor.defaultMatchesCurrent());
+    undoButton.setEnabled(processor.canUndo());
+    redoButton.setEnabled(processor.canRedo());
 }
 
 void AeroGateAudioProcessorEditor::updateButtonStates()
@@ -1762,6 +1723,7 @@ void AeroGateAudioProcessorEditor::timerCallback()
     updateDepthState();
     updateAuditionState();
     syncBypass();
+    updateHistoryButtons();
 }
 
 bool AeroGateAudioProcessorEditor::keyPressed(const juce::KeyPress& key)
