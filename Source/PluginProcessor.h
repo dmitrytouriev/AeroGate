@@ -75,6 +75,7 @@ public:
     void resetToDefault();
     bool defaultMatchesCurrent() const;
     bool hasUserDefault() const;
+    bool isFactoryResetArmed() const;
 
     static constexpr const char* thresholdParamId = "threshold";
     static constexpr const char* closeParamId = "close";
@@ -115,6 +116,7 @@ private:
     size_t historyIndex = 0;
     int historyGestureDepth = 0;
     bool customDefault = false;
+    bool factoryResetArmed = false;
     bool applyingSnapshot = false;
 
     void resetDsp();
